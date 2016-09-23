@@ -27,11 +27,25 @@ import org.scalatest.BeforeAndAfterAll
 class TestLoadDataUseAllDictionary extends QueryTest with BeforeAndAfterAll{
   override def beforeAll {
     sql("DROP TABLE IF EXISTS t3")
+    sql("DROP TABLE IF EXISTS t4")
+    sql("DROP TABLE IF EXISTS t4AllDict1")
+    sql("DROP TABLE IF EXISTS t4AllDict2")
+
     sql("""
            CREATE TABLE IF NOT EXISTS t3
            (ID Int, date Timestamp, country String,
            name String, phonetype String, serialname String, salary Int)
            STORED BY 'carbondata'
+           """)
+
+    sql("""
+           CREATE TABLE IF NOT EXISTS t4
+           (ID Int, date Timestamp, country String,
+           name String, phonetype String, serialname String, salary Int)
+           STORED BY 'carbondata'
+           """)
+    sql(s"""
+           LOAD DATA LOCAL INPATH './src/test/resources/alldictionary/multiFiles/' into table t4
            """)
   }
 
@@ -50,7 +64,40 @@ class TestLoadDataUseAllDictionary extends QueryTest with BeforeAndAfterAll{
     }
   }
 
+  test("test load data use all dictionary, and all dictionary path is folder") {
+    sql("""
+           CREATE TABLE IF NOT EXISTS t4AllDict1
+           (ID Int, date Timestamp, country String,
+           name String, phonetype String, serialname String, salary Int)
+           STORED BY 'carbondata'
+        """)
+    sql(s"""
+           LOAD DATA LOCAL INPATH './src/test/resources/alldictionary/multiFiles/' into table t4AllDict1
+           options('ALL_DICTIONARY_PATH'='./src/test/resources/alldictionary/multiDicts/')
+           """)
+    checkAnswer(sql("select * from t4AllDict1"),
+      sql("select * from t4"))
+  }
+
+  test("test load data use all dictionary, and all dictionary path look likes '/path/*.dict'") {
+    sql("""
+           CREATE TABLE IF NOT EXISTS t4AllDict2
+           (ID Int, date Timestamp, country String,
+           name String, phonetype String, serialname String, salary Int)
+           STORED BY 'carbondata'
+        """)
+    sql(s"""
+           LOAD DATA LOCAL INPATH './src/test/resources/alldictionary/multiFiles/' into table t4AllDict2
+           options('ALL_DICTIONARY_PATH'='./src/test/resources/alldictionary/multiDicts/*.dictionary')
+           """)
+    checkAnswer(sql("select * from t4AllDict2"),
+      sql("select * from t4"))
+  }
+
   override def afterAll {
     sql("DROP TABLE IF EXISTS t3")
+    sql("DROP TABLE IF EXISTS t4")
+    sql("DROP TABLE IF EXISTS t4AllDict1")
+    sql("DROP TABLE IF EXISTS t4AllDict2")
   }
 }

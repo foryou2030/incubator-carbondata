@@ -670,17 +670,20 @@ object GlobalDictionaryUtil extends Logging {
   /**
    * validate local dictionary files
    *
-   * @param allDictionaryPath
+   * @param allDictPath
    * @return (isNonempty, isDirectory)
    */
-  private def validateAllDictionaryPath(allDictionaryPath: String): Boolean = {
-    val fileType = FileFactory.getFileType(allDictionaryPath)
-    val filePath = FileFactory.getCarbonFile(allDictionaryPath, fileType)
-    // filepath regex, look like "/path/*.dictionary"
-    if (filePath.getName.startsWith("*")) {
-      val dictExt = filePath.getName.substring(1)
-      if (filePath.getParentFile.exists()) {
-        val listFiles = filePath.getParentFile.listFiles()
+  private def validateAllDictionaryPath(allDictPath: String): Boolean = {
+    val allDictionaryPath = allDictPath.replace("\\", "/")
+    val fileName = allDictionaryPath.substring(allDictionaryPath.lastIndexOf("/") + 1)
+    // filepath regex, looks like "/path/*.dictionary"
+    if (fileName.startsWith("*")) {
+      val dictExt = fileName.substring(1)
+      val parenFile = allDictionaryPath.substring(0, allDictionaryPath.lastIndexOf("/"))
+      val fileType = FileFactory.getFileType(parenFile)
+      val filePath = FileFactory.getCarbonFile(parenFile, fileType)
+      if (filePath.exists()) {
+        val listFiles = filePath.listFiles()
         if (listFiles.exists(file =>
           file.getName.endsWith(dictExt) && file.getSize > 0)) {
           true
@@ -694,13 +697,26 @@ object GlobalDictionaryUtil extends Logging {
           "The given dictionary file path is not found!")
       }
     } else {
+      val fileType = FileFactory.getFileType(allDictionaryPath)
+      val filePath = FileFactory.getCarbonFile(allDictionaryPath, fileType)
       if (filePath.exists()) {
-        if (filePath.getSize > 0) {
-          true
+        if (filePath.isDirectory) {
+          val listFiles = filePath.listFiles()
+          if (listFiles.exists(file => file.getSize > 0)) {
+            true
+          } else {
+            logWarning("No dictionary files found or empty dictionary files! " +
+              "Won't generate new dictionary.")
+            false
+          }
         } else {
-          logWarning("No dictionary files found or empty dictionary files! " +
-            "Won't generate new dictionary.")
-          false
+          if (filePath.getSize > 0) {
+            true
+          } else {
+            logWarning("No dictionary files found or empty dictionary files! " +
+              "Won't generate new dictionary.")
+            false
+          }
         }
       } else {
         throw new FileNotFoundException(
