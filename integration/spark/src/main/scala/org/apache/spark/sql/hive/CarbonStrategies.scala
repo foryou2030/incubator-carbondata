@@ -22,22 +22,21 @@ import java.util
 import scala.collection.JavaConverters._
 
 import org.apache.spark.sql._
+import org.apache.spark.sql.catalyst.{expressions, TableIdentifier}
+import org.apache.spark.sql.catalyst.CarbonTableIdentifierImplicit._
 import org.apache.spark.sql.catalyst.analysis.UnresolvedRelation
-import org.apache.spark.sql.catalyst.TableIdentifier
-import org.apache.spark.sql.catalyst.TableIdentifier._
-import org.apache.spark.sql.catalyst.expressions
 import org.apache.spark.sql.catalyst.expressions.{AttributeSet, _}
 import org.apache.spark.sql.catalyst.planning.{PhysicalOperation, QueryPlanner}
 import org.apache.spark.sql.catalyst.plans.logical.{Filter => LogicalFilter, LogicalPlan}
-import org.apache.spark.sql.execution.{DescribeCommand => RunnableDescribeCommand, ExecutedCommand, Filter, Project, SparkPlan}
+import org.apache.spark.sql.execution.{ExecutedCommand, Filter, Project, SparkPlan}
 import org.apache.spark.sql.execution.command._
 import org.apache.spark.sql.execution.datasources.{DescribeCommand => LogicalDescribeCommand, LogicalRelation}
-import org.apache.spark.sql.hive.execution.{DescribeHiveTableCommand, DropTable, HiveNativeCommand}
+import org.apache.spark.sql.hive.execution.{DropTable, HiveNativeCommand}
 import org.apache.spark.sql.optimizer.{CarbonAliasDecoderRelation, CarbonDecoderRelation}
 import org.apache.spark.sql.types.IntegerType
 
-import org.carbondata.common.logging.LogServiceFactory
-import org.carbondata.spark.exception.MalformedCarbonCommandException
+import org.apache.carbondata.common.logging.LogServiceFactory
+import org.apache.carbondata.spark.exception.MalformedCarbonCommandException
 
 
 class CarbonStrategies(sqlContext: SQLContext) extends QueryPlanner[SparkPlan] {
@@ -59,15 +58,12 @@ class CarbonStrategies(sqlContext: SQLContext) extends QueryPlanner[SparkPlan] {
 
     def apply(plan: LogicalPlan): Seq[SparkPlan] = {
       plan match {
-        case PhysicalOperation(projectList, predicates,
-        l@LogicalRelation(carbonRelation: CarbonDatasourceRelation, _)) =>
+        case PhysicalOperation(projectList, predicates, l: LogicalRelation)
+            if l.relation.isInstanceOf[CarbonDatasourceRelation] =>
           if (isStarQuery(plan)) {
-            carbonRawScanForStarQuery(projectList, predicates, carbonRelation, l)(sqlContext) :: Nil
+            carbonRawScanForStarQuery(projectList, predicates, l)(sqlContext) :: Nil
           } else {
-            carbonRawScan(projectList,
-              predicates,
-              carbonRelation,
-              l)(sqlContext) :: Nil
+            carbonRawScan(projectList, predicates, l)(sqlContext) :: Nil
           }
         case CarbonDictionaryCatalystDecoder(relations, profile, aliasMap, _, child) =>
           CarbonDictionaryDecoder(relations,
@@ -84,9 +80,9 @@ class CarbonStrategies(sqlContext: SQLContext) extends QueryPlanner[SparkPlan] {
      */
     private def carbonRawScan(projectList: Seq[NamedExpression],
       predicates: Seq[Expression],
-      relation: CarbonDatasourceRelation,
       logicalRelation: LogicalRelation)(sc: SQLContext): SparkPlan = {
 
+      val relation = logicalRelation.relation.asInstanceOf[CarbonDatasourceRelation]
       val tableName: String =
         relation.carbonRelation.metaData.carbonTable.getFactTableName.toLowerCase
       // Check out any expressions are there in project list. if they are present then we need to
@@ -128,9 +124,8 @@ class CarbonStrategies(sqlContext: SQLContext) extends QueryPlanner[SparkPlan] {
      */
     private def carbonRawScanForStarQuery(projectList: Seq[NamedExpression],
       predicates: Seq[Expression],
-      relation: CarbonDatasourceRelation,
       logicalRelation: LogicalRelation)(sc: SQLContext): SparkPlan = {
-
+      val relation = logicalRelation.relation.asInstanceOf[CarbonDatasourceRelation]
       val tableName: String =
         relation.carbonRelation.metaData.carbonTable.getFactTableName.toLowerCase
       // Check out any expressions are there in project list. if they are present then we need to
@@ -213,9 +208,10 @@ class CarbonStrategies(sqlContext: SQLContext) extends QueryPlanner[SparkPlan] {
 
     private def isStarQuery(plan: LogicalPlan) = {
       plan match {
-        case LogicalFilter(condition,
-        LogicalRelation(carbonRelation: CarbonDatasourceRelation, _)) => true
-        case LogicalRelation(carbonRelation: CarbonDatasourceRelation, _) => true
+        case LogicalFilter(condition, l: LogicalRelation)
+            if l.relation.isInstanceOf[CarbonDatasourceRelation] =>
+          true
+        case l: LogicalRelation if l.relation.isInstanceOf[CarbonDatasourceRelation] => true
         case _ => false
       }
     }
@@ -223,31 +219,37 @@ class CarbonStrategies(sqlContext: SQLContext) extends QueryPlanner[SparkPlan] {
 
   object DDLStrategies extends Strategy {
     def apply(plan: LogicalPlan): Seq[SparkPlan] = plan match {
-      case ShowCubeCommand(schemaName) =>
-        ExecutedCommand(ShowAllTablesInSchema(schemaName, plan.output)) :: Nil
-      case c@ShowAllCubeCommand() =>
-        ExecutedCommand(ShowAllTables(plan.output)) :: Nil
-      case ShowCreateCubeCommand(cm) =>
-        ExecutedCommand(ShowCreateTable(cm, plan.output)) :: Nil
-      case ShowTablesDetailedCommand(schemaName) =>
-        ExecutedCommand(ShowAllTablesDetail(schemaName, plan.output)) :: Nil
       case DropTable(tableName, ifNotExists)
-        if CarbonEnv.getInstance(sqlContext).carbonCatalog
-            .tableExists(TableIdentifier(tableName.toLowerCase, None))(sqlContext) =>
-        ExecutedCommand(DropTableCommand(ifNotExists, None, tableName.toLowerCase)) :: Nil
-      case ShowAggregateTablesCommand(schemaName) =>
-        ExecutedCommand(ShowAggregateTables(schemaName, plan.output)) :: Nil
-      case ShowLoadsCommand(schemaName, cube, limit) =>
-        ExecutedCommand(ShowLoads(schemaName, cube, limit, plan.output)) :: Nil
-      case LoadTable(schemaNameOp, cubeName, factPathFromUser, dimFilesPath,
-      partionValues, isOverwriteExist, inputSqlString) =>
+        if (CarbonEnv.getInstance(sqlContext).carbonCatalog
+            .isTablePathExists(toTableIdentifier(tableName.toLowerCase))(sqlContext)) =>
+        val identifier = toTableIdentifier(tableName.toLowerCase)
+        ExecutedCommand(DropTableCommand(ifNotExists, identifier.database, identifier.table)) :: Nil
+      case ShowLoadsCommand(databaseName, table, limit) =>
+        ExecutedCommand(ShowLoads(databaseName, table, limit, plan.output)) :: Nil
+      case LoadTable(databaseNameOp, tableName, factPathFromUser, dimFilesPath,
+      options, isOverwriteExist, inputSqlString, dataFrame, useKettle) =>
         val isCarbonTable = CarbonEnv.getInstance(sqlContext).carbonCatalog
-            .tableExists(TableIdentifier(cubeName, schemaNameOp))(sqlContext)
-        if (isCarbonTable || partionValues.nonEmpty) {
-          ExecutedCommand(LoadTable(schemaNameOp, cubeName, factPathFromUser,
-            dimFilesPath, partionValues, isOverwriteExist, inputSqlString)) :: Nil
+            .tableExists(TableIdentifier(tableName, databaseNameOp))(sqlContext)
+        if (isCarbonTable || options.nonEmpty) {
+          ExecutedCommand(LoadTable(databaseNameOp, tableName, factPathFromUser, dimFilesPath,
+            options, isOverwriteExist, inputSqlString, dataFrame, useKettle)) :: Nil
         } else {
           ExecutedCommand(HiveNativeCommand(inputSqlString)) :: Nil
+        }
+      case alterTable@AlterTableCompaction(altertablemodel) =>
+        val isCarbonTable = CarbonEnv.getInstance(sqlContext).carbonCatalog
+            .tableExists(TableIdentifier(altertablemodel.tableName,
+                 altertablemodel.dbName))(sqlContext)
+        if (isCarbonTable) {
+          if (altertablemodel.compactionType.equalsIgnoreCase("minor") ||
+              altertablemodel.compactionType.equalsIgnoreCase("major")) {
+            ExecutedCommand(alterTable) :: Nil
+          } else {
+            throw new MalformedCarbonCommandException(
+                "Unsupported alter operation on carbon table")
+          }
+        } else {
+          ExecutedCommand(HiveNativeCommand(altertablemodel.alterSql)) :: Nil
         }
       case d: HiveNativeCommand =>
         try {
@@ -261,30 +263,27 @@ class CarbonStrategies(sqlContext: SQLContext) extends QueryPlanner[SparkPlan] {
           case e: Exception => ExecutedCommand(d) :: Nil
         }
       case DescribeFormattedCommand(sql, tblIdentifier) =>
-        val isCube = CarbonEnv.getInstance(sqlContext).carbonCatalog
+        val isTable = CarbonEnv.getInstance(sqlContext).carbonCatalog
             .tableExists(tblIdentifier)(sqlContext)
-        if (isCube) {
+        if (isTable) {
           val describe =
             LogicalDescribeCommand(UnresolvedRelation(tblIdentifier, None), isExtended = false)
           val resolvedTable = sqlContext.executePlan(describe.table).analyzed
           val resultPlan = sqlContext.executePlan(resolvedTable).executedPlan
           ExecutedCommand(DescribeCommandFormatted(resultPlan, plan.output, tblIdentifier)) :: Nil
         } else {
-          ExecutedCommand(DescribeNativeCommand(sql, plan.output)) :: Nil
-        }
-      case describe@LogicalDescribeCommand(table, isExtended) =>
-        val resolvedTable = sqlContext.executePlan(describe.table).analyzed
-        resolvedTable match {
-          case t: MetastoreRelation =>
-            ExecutedCommand(
-              DescribeHiveTableCommand(t, describe.output, describe.isExtended)) :: Nil
-          case o: LogicalPlan =>
-            val resultPlan = sqlContext.executePlan(o).executedPlan
-            ExecutedCommand(
-              RunnableDescribeCommand(resultPlan, describe.output, describe.isExtended)) :: Nil
+          ExecutedCommand(HiveNativeCommand(sql)) :: Nil
         }
       case _ =>
         Nil
+    }
+
+    def toTableIdentifier(name: String): TableIdentifier = {
+      val identifier = name.split("\\.")
+      identifier match {
+        case Array(tableName) => TableIdentifier(tableName, None)
+        case Array(dbName, tableName) => TableIdentifier(tableName, Some(dbName))
+      }
     }
   }
 

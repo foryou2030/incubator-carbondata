@@ -21,25 +21,29 @@ import java.util.regex.{Matcher, Pattern}
 
 import scala.collection.JavaConverters._
 import scala.collection.mutable.LinkedHashSet
+import scala.collection.mutable.Map
 import scala.language.implicitConversions
 import scala.util.matching.Regex
 
 import org.apache.hadoop.hive.ql.lib.Node
 import org.apache.hadoop.hive.ql.parse._
 import org.apache.spark.Logging
-import org.apache.spark.sql.catalyst.{SqlLexical, _}
+import org.apache.spark.sql.catalyst._
+import org.apache.spark.sql.catalyst.CarbonTableIdentifierImplicit._
 import org.apache.spark.sql.catalyst.analysis._
 import org.apache.spark.sql.catalyst.plans.logical._
 import org.apache.spark.sql.catalyst.trees.CurrentOrigin
+import org.apache.spark.sql.execution.ExplainCommand
 import org.apache.spark.sql.execution.command._
 import org.apache.spark.sql.execution.datasources.DescribeCommand
 import org.apache.spark.sql.hive.HiveQlWrapper
 
-import org.carbondata.core.carbon.metadata.datatype.DataType
-import org.carbondata.core.constants.CarbonCommonConstants
-import org.carbondata.core.util.DataTypeUtil
-import org.carbondata.spark.exception.MalformedCarbonCommandException
-import org.carbondata.spark.util.CommonUtil
+import org.apache.carbondata.common.logging.LogServiceFactory
+import org.apache.carbondata.core.carbon.metadata.datatype.DataType
+import org.apache.carbondata.core.constants.CarbonCommonConstants
+import org.apache.carbondata.core.util.{CarbonProperties, DataTypeUtil}
+import org.apache.carbondata.spark.exception.MalformedCarbonCommandException
+import org.apache.carbondata.spark.util.CommonUtil
 
 /**
  * Parser for All Carbon DDL, DML cases in Unified context
@@ -47,98 +51,108 @@ import org.carbondata.spark.util.CommonUtil
 class CarbonSqlParser()
   extends AbstractSparkSQLParser with Logging {
 
-  protected val AGGREGATE = Keyword("AGGREGATE")
-  protected val AS = Keyword("AS")
-  protected val AGGREGATION = Keyword("AGGREGATION")
-  protected val ALL = Keyword("ALL")
-  protected val HIGH_CARDINALITY_DIMS = Keyword("NO_DICTIONARY")
-  protected val BEFORE = Keyword("BEFORE")
-  protected val BY = Keyword("BY")
-  protected val CARDINALITY = Keyword("CARDINALITY")
-  protected val CLASS = Keyword("CLASS")
-  protected val CLEAN = Keyword("CLEAN")
-  protected val COLS = Keyword("COLS")
-  protected val COLUMNS = Keyword("COLUMNS")
-  protected val CREATE = Keyword("CREATE")
-  protected val CUBE = Keyword("CUBE")
-  protected val CUBES = Keyword("CUBES")
-  protected val DATA = Keyword("DATA")
-  protected val DATABASES = Keyword("DATABASES")
-  protected val DELETE = Keyword("DELETE")
-  protected val DELIMITER = Keyword("DELIMITER")
-  protected val DESCRIBE = Keyword("DESCRIBE")
-  protected val DESC = Keyword("DESC")
-  protected val DETAIL = Keyword("DETAIL")
-  protected val DIMENSIONS = Keyword("DIMENSIONS")
-  protected val DIMFOLDERPATH = Keyword("DIMFOLDERPATH")
-  protected val DROP = Keyword("DROP")
-  protected val ESCAPECHAR = Keyword("ESCAPECHAR")
-  protected val EXCLUDE = Keyword("EXCLUDE")
-  protected val EXTENDED = Keyword("EXTENDED")
-  protected val FORMATTED = Keyword("FORMATTED")
-  protected val FACT = Keyword("FACT")
-  protected val FIELDS = Keyword("FIELDS")
-  protected val FILEHEADER = Keyword("FILEHEADER")
-  protected val FILES = Keyword("FILES")
-  protected val FROM = Keyword("FROM")
-  protected val HIERARCHIES = Keyword("HIERARCHIES")
-  protected val IN = Keyword("IN")
-  protected val INCLUDE = Keyword("INCLUDE")
-  protected val INPATH = Keyword("INPATH")
-  protected val INTO = Keyword("INTO")
-  protected val LEVELS = Keyword("LEVELS")
-  protected val LIKE = Keyword("LIKE")
-  protected val LOAD = Keyword("LOAD")
-  protected val LOADS = Keyword("LOADS")
-  protected val LOCAL = Keyword("LOCAL")
-  protected val MAPPED = Keyword("MAPPED")
-  protected val MEASURES = Keyword("MEASURES")
-  protected val MULTILINE = Keyword("MULTILINE")
-  protected val COMPLEX_DELIMITER_LEVEL_1 = Keyword("COMPLEX_DELIMITER_LEVEL_1")
-  protected val COMPLEX_DELIMITER_LEVEL_2 = Keyword("COMPLEX_DELIMITER_LEVEL_2")
-  protected val OPTIONS = Keyword("OPTIONS")
-  protected val OUTPATH = Keyword("OUTPATH")
-  protected val OVERWRITE = Keyword("OVERWRITE")
-  protected val PARTITION_COUNT = Keyword("PARTITION_COUNT")
-  protected val PARTITIONDATA = Keyword("PARTITIONDATA")
-  protected val PARTITIONER = Keyword("PARTITIONER")
-  protected val QUOTECHAR = Keyword("QUOTECHAR")
-  protected val RELATION = Keyword("RELATION")
-  protected val SCHEMAS = Keyword("SCHEMAS")
-  protected val SHOW = Keyword("SHOW")
-  protected val TABLES = Keyword("TABLES")
-  protected val TABLE = Keyword("TABLE")
-  protected val TERMINATED = Keyword("TERMINATED")
-  protected val TYPE = Keyword("TYPE")
-  protected val USE = Keyword("USE")
-  protected val WHERE = Keyword("WHERE")
-  protected val WITH = Keyword("WITH")
-  protected val AGGREGATETABLE = Keyword("AGGREGATETABLE")
-  protected val SUM = Keyword("sum")
-  protected val COUNT = Keyword("count")
-  protected val AVG = Keyword("avg")
-  protected val MAX = Keyword("max")
-  protected val MIN = Keyword("min")
-  protected val DISTINCT = Keyword("distinct")
-  protected val DISTINCT_COUNT = Keyword("distinct-count")
-  protected val SUM_DISTINCT = Keyword("sum-distinct")
-  protected val ABS = Keyword("abs")
+  val LOGGER = LogServiceFactory.getLogService(this.getClass.getCanonicalName)
+  protected val AGGREGATE = carbonKeyWord("AGGREGATE")
+  protected val AS = carbonKeyWord("AS")
+  protected val AGGREGATION = carbonKeyWord("AGGREGATION")
+  protected val ALL = carbonKeyWord("ALL")
+  protected val HIGH_CARDINALITY_DIMS = carbonKeyWord("NO_DICTIONARY")
+  protected val BEFORE = carbonKeyWord("BEFORE")
+  protected val BY = carbonKeyWord("BY")
+  protected val CARDINALITY = carbonKeyWord("CARDINALITY")
+  protected val CASCADE = carbonKeyWord("CASCADE")
+  protected val CLASS = carbonKeyWord("CLASS")
+  protected val CLEAN = carbonKeyWord("CLEAN")
+  protected val COLS = carbonKeyWord("COLS")
+  protected val COLUMNS = carbonKeyWord("COLUMNS")
+  protected val CREATE = carbonKeyWord("CREATE")
+  protected val CUBE = carbonKeyWord("CUBE")
+  protected val CUBES = carbonKeyWord("CUBES")
+  protected val DATA = carbonKeyWord("DATA")
+  protected val DATABASE = carbonKeyWord("DATABASE")
+  protected val DATABASES = carbonKeyWord("DATABASES")
+  protected val DELETE = carbonKeyWord("DELETE")
+  protected val DELIMITER = carbonKeyWord("DELIMITER")
+  protected val DESCRIBE = carbonKeyWord("DESCRIBE")
+  protected val DESC = carbonKeyWord("DESC")
+  protected val DETAIL = carbonKeyWord("DETAIL")
+  protected val DIMENSIONS = carbonKeyWord("DIMENSIONS")
+  protected val DIMFOLDERPATH = carbonKeyWord("DIMFOLDERPATH")
+  protected val DROP = carbonKeyWord("DROP")
+  protected val ESCAPECHAR = carbonKeyWord("ESCAPECHAR")
+  protected val EXCLUDE = carbonKeyWord("EXCLUDE")
+  protected val EXPLAIN = carbonKeyWord("EXPLAIN")
+  protected val EXTENDED = carbonKeyWord("EXTENDED")
+  protected val FORMATTED = carbonKeyWord("FORMATTED")
+  protected val FACT = carbonKeyWord("FACT")
+  protected val FIELDS = carbonKeyWord("FIELDS")
+  protected val FILEHEADER = carbonKeyWord("FILEHEADER")
+  protected val SERIALIZATION_NULL_FORMAT = carbonKeyWord("SERIALIZATION_NULL_FORMAT")
+  protected val BAD_RECORDS_LOGGER_ENABLE = carbonKeyWord("BAD_RECORDS_LOGGER_ENABLE")
+  protected val BAD_RECORDS_ACTION = carbonKeyWord("BAD_RECORDS_ACTION")
+  protected val FILES = carbonKeyWord("FILES")
+  protected val FROM = carbonKeyWord("FROM")
+  protected val HIERARCHIES = carbonKeyWord("HIERARCHIES")
+  protected val IN = carbonKeyWord("IN")
+  protected val INCLUDE = carbonKeyWord("INCLUDE")
+  protected val INPATH = carbonKeyWord("INPATH")
+  protected val INTO = carbonKeyWord("INTO")
+  protected val LEVELS = carbonKeyWord("LEVELS")
+  protected val LIKE = carbonKeyWord("LIKE")
+  protected val LOAD = carbonKeyWord("LOAD")
+  protected val LOCAL = carbonKeyWord("LOCAL")
+  protected val MAPPED = carbonKeyWord("MAPPED")
+  protected val MEASURES = carbonKeyWord("MEASURES")
+  protected val MULTILINE = carbonKeyWord("MULTILINE")
+  protected val COMPLEX_DELIMITER_LEVEL_1 = carbonKeyWord("COMPLEX_DELIMITER_LEVEL_1")
+  protected val COMPLEX_DELIMITER_LEVEL_2 = carbonKeyWord("COMPLEX_DELIMITER_LEVEL_2")
+  protected val OPTIONS = carbonKeyWord("OPTIONS")
+  protected val OUTPATH = carbonKeyWord("OUTPATH")
+  protected val OVERWRITE = carbonKeyWord("OVERWRITE")
+  protected val PARTITION_COUNT = carbonKeyWord("PARTITION_COUNT")
+  protected val PARTITIONDATA = carbonKeyWord("PARTITIONDATA")
+  protected val PARTITIONER = carbonKeyWord("PARTITIONER")
+  protected val QUOTECHAR = carbonKeyWord("QUOTECHAR")
+  protected val RELATION = carbonKeyWord("RELATION")
+  protected val SCHEMA = carbonKeyWord("SCHEMA")
+  protected val SCHEMAS = carbonKeyWord("SCHEMAS")
+  protected val SHOW = carbonKeyWord("SHOW")
+  protected val TABLES = carbonKeyWord("TABLES")
+  protected val TABLE = carbonKeyWord("TABLE")
+  protected val TERMINATED = carbonKeyWord("TERMINATED")
+  protected val TYPE = carbonKeyWord("TYPE")
+  protected val USE = carbonKeyWord("USE")
+  protected val WHERE = carbonKeyWord("WHERE")
+  protected val WITH = carbonKeyWord("WITH")
+  protected val AGGREGATETABLE = carbonKeyWord("AGGREGATETABLE")
+  protected val ABS = carbonKeyWord("abs")
 
-  protected val FOR = Keyword("FOR")
-  protected val SCRIPTS = Keyword("SCRIPTS")
-  protected val USING = Keyword("USING")
-  protected val LIMIT = Keyword("LIMIT")
-  protected val DEFAULTS = Keyword("DEFAULTS")
-  protected val ALTER = Keyword("ALTER")
-  protected val ADD = Keyword("ADD")
+  protected val FOR = carbonKeyWord("FOR")
+  protected val SCRIPTS = carbonKeyWord("SCRIPTS")
+  protected val USING = carbonKeyWord("USING")
+  protected val LIMIT = carbonKeyWord("LIMIT")
+  protected val DEFAULTS = carbonKeyWord("DEFAULTS")
+  protected val ALTER = carbonKeyWord("ALTER")
+  protected val ADD = carbonKeyWord("ADD")
 
-  protected val IF = Keyword("IF")
-  protected val NOT = Keyword("NOT")
-  protected val EXISTS = Keyword("EXISTS")
-  protected val DIMENSION = Keyword("DIMENSION")
-  protected val STARTTIME = Keyword("STARTTIME")
-  protected val SEGMENTS = Keyword("SEGMENTS")
-  protected val SEGMENT = Keyword("SEGMENT")
+  protected val IF = carbonKeyWord("IF")
+  protected val NOT = carbonKeyWord("NOT")
+  protected val EXISTS = carbonKeyWord("EXISTS")
+  protected val DIMENSION = carbonKeyWord("DIMENSION")
+  protected val STARTTIME = carbonKeyWord("STARTTIME")
+  protected val SEGMENTS = carbonKeyWord("SEGMENTS")
+  protected val SEGMENT = carbonKeyWord("SEGMENT")
+
+  protected val STRING = carbonKeyWord("STRING")
+  protected val INTEGER = carbonKeyWord("INTEGER")
+  protected val TIMESTAMP = carbonKeyWord("TIMESTAMP")
+  protected val NUMERIC = carbonKeyWord("NUMERIC")
+  protected val DECIMAL = carbonKeyWord("DECIMAL")
+  protected val DOUBLE = carbonKeyWord("DOUBLE")
+  protected val INT = carbonKeyWord("INT")
+  protected val BIGINT = carbonKeyWord("BIGINT")
+  protected val ARRAY = carbonKeyWord("ARRAY")
+  protected val STRUCT = carbonKeyWord("STRUCT")
 
   protected val doubleQuotedString = "\"([^\"]+)\"".r
   protected val singleQuotedString = "'([^']+)'".r
@@ -175,72 +189,21 @@ class CarbonSqlParser()
     }
   }
 
-  override protected lazy val start: Parser[LogicalPlan] =
-    loadManagement | describeTable | showLoads | alterTable | createTable
+  /**
+   * This will convert key word to regular expression.
+   * @param keys
+   * @return
+   */
+  private def carbonKeyWord(keys: String) =
+    ("(?i)" + keys).r
+
+  override protected lazy val start: Parser[LogicalPlan] = explainPlan | startCommand
+
+  protected lazy val startCommand: Parser[LogicalPlan] =
+    dropDatabaseCascade | loadManagement | describeTable | showLoads | alterTable | createTable
 
   protected lazy val loadManagement: Parser[LogicalPlan] = deleteLoadsByID | deleteLoadsByLoadDate |
     cleanFiles | loadDataNew
-
-  protected lazy val aggregates: Parser[Seq[AggregateTableAttributes]] =
-    repsep((aggregateExpression | aggAttribute), ",")
-
-  protected lazy val aggAttribute: Parser[AggregateTableAttributes] =
-    (ident | stringLit) ^^ {
-      case e1 => AggregateTableAttributes(e1)
-    }
-
-  protected lazy val aggregateExpression: Parser[AggregateTableAttributes] =
-    (SUM ~> "(" ~> (ident | stringLit) <~ ")" ^^
-      { case e1 => AggregateTableAttributes(e1, SUM.str) } |
-      COUNT ~> "(" ~> (ident | stringLit) <~ ")" ^^
-        { case e1 => AggregateTableAttributes(e1, COUNT.str) } |
-      MAX ~> "(" ~> (ident | stringLit) <~ ")" ^^
-        { case e1 => AggregateTableAttributes(e1, MAX.str) } |
-      MIN ~> "(" ~> (ident | stringLit) <~ ")" ^^
-        { case e1 => AggregateTableAttributes(e1, MIN.str) } |
-      COUNT ~> "(" ~> DISTINCT ~> (ident | stringLit) <~ ")" ^^
-        { case e1 => AggregateTableAttributes(e1,
-          DISTINCT_COUNT.str)
-        } |
-      DISTINCT ~> COUNT ~> "(" ~> (ident | stringLit) <~ ")" ^^
-        { case e1 => AggregateTableAttributes(e1,
-          COUNT.str)
-        } |
-      SUM ~> "(" ~> DISTINCT ~> (ident | stringLit) <~ ")" ^^
-        { case e1 => AggregateTableAttributes(e1,
-          SUM_DISTINCT.str)
-        } |
-      AVG ~> "(" ~> (ident | stringLit) <~ ")" ^^
-        { case e1 => AggregateTableAttributes(e1, AVG.str) }
-      )
-
-  protected lazy val defaultExpr =
-    (ident | stringLit) ~ ("=" ~> (ident | stringLit | numericLit)) ^^ {
-      case e1 ~ e2 =>
-        Default(e1, e2.toString())
-    }
-
-  protected lazy val defaultVals =
-    rep1sep(defaultExpr, ",")
-
-  protected lazy val defaultDefn =
-    DEFAULTS ~> ("[" ~> defaultVals <~ "]")
-
-  protected lazy val defaultOptions =
-    ("(" ~> (noDictionaryDims).? ~ (aggregation).? ~ defaultDefn.? <~ ")")
-
-  protected lazy val dropDefinition =
-    DROP ~> "(" ~> rep1sep((stringLit | ident), ",") <~ ")"
-
-  protected lazy val aggOptionsForShowCreate =
-    (aggregation).? ~ (",".? ~> partitioner).?
-  protected lazy val aggOptions =
-    (noDictionaryDims).? ~ (",".? ~> aggregation).? ~ (",".? ~> partitioner).?
-  protected lazy val showcreateCubeOptionDef =
-    ("(" ~> aggOptionsForShowCreate <~ ")")
-
-  protected lazy val createCubeOptionDef =
-    ("(" ~> aggOptions <~ ")")
 
   protected val escapedIdentifier = "`([^`]+)`".r
 
@@ -261,10 +224,11 @@ class CarbonSqlParser()
     ALTER ~> TABLE ~> restInput ^^ {
       case statement =>
         try {
+          val alterSql = "alter table " + statement
           // DDl will be parsed and we get the AST tree from the HiveQl
-          val node = HiveQlWrapper.getAst("alter table " + statement)
+          val node = HiveQlWrapper.getAst(alterSql)
           // processing the AST tree
-          nodeToPlanForAlterTable(node)
+          nodeToPlanForAlterTable(node, alterSql)
         } catch {
           // MalformedCarbonCommandException need to be throw directly, parser will catch it
           case ce: MalformedCarbonCommandException =>
@@ -298,7 +262,7 @@ class CarbonSqlParser()
     m.find()
     val matchedString: String = m.group(1)
     val scaleAndPrecision = matchedString.split(",")
-    (Integer.parseInt(scaleAndPrecision(0)), Integer.parseInt(scaleAndPrecision(1)))
+    (Integer.parseInt(scaleAndPrecision(0).trim), Integer.parseInt(scaleAndPrecision(1).trim))
   }
 
   /**
@@ -312,103 +276,133 @@ class CarbonSqlParser()
       // if create table taken is found then only we will handle.
       case Token("TOK_CREATETABLE", children) =>
 
-        var fields: Seq[Field] = Seq[Field]()
-        var tableComment: String = ""
-        var tableProperties = Map[String, String]()
-        var partitionCols: Seq[PartitionerField] = Seq[PartitionerField]()
-        var likeTableName: String = ""
-        var storedBy: String = ""
-        var ifNotExistPresent: Boolean = false
-        var dbName: Option[String] = None
-        var tableName: String = ""
 
-        children.collect {
-          // collecting all the field  list
-          case list@Token("TOK_TABCOLLIST", _) =>
-            val cols = BaseSemanticAnalyzer.getColumns(list, true)
-            if (cols != null) {
-              val dupColsGrp = cols.asScala
-                                 .groupBy(x => x.getName) filter { case (_, colList) => colList
-                                                                                          .size > 1
-                               }
-              if (dupColsGrp.size > 0) {
-                var columnName: String = ""
-                dupColsGrp.toSeq.foreach(columnName += _._1 + ", ")
-                columnName = columnName.substring(0, columnName.lastIndexOf(", "))
-                val errorMessage = "Duplicate column name: " + columnName + " found in table " +
-                                   ".Please check create table statement."
-                throw new MalformedCarbonCommandException(errorMessage)
-              }
-              cols.asScala.map { col =>
-                val columnName = col.getName()
-                val dataType = Option(col.getType)
-                val name = Option(col.getName())
-                // This is to parse complex data types
-                val f: Field = anyFieldDef(new lexical.Scanner(col.getName + ' ' + col.getType))
-                match {
-                  case Success(field, _) => field
-                  case failureOrError => new Field(columnName, dataType, name, None, null,
-                    Some("columnar"))
+          var fields: Seq[Field] = Seq[Field]()
+          var tableComment: String = ""
+          var tableProperties = Map[String, String]()
+          var partitionCols: Seq[PartitionerField] = Seq[PartitionerField]()
+          var likeTableName: String = ""
+          var storedBy: String = ""
+          var ifNotExistPresent: Boolean = false
+          var dbName: Option[String] = None
+          var tableName: String = ""
+
+          try {
+
+          // Checking whether create table request is carbon table
+          children.collect {
+            case Token("TOK_STORAGEHANDLER", child :: Nil) =>
+              storedBy = BaseSemanticAnalyzer.unescapeSQLString(child.getText).trim.toLowerCase
+            case _ =>
+          }
+          if (!(storedBy.equals(CarbonContext.datasourceName) ||
+              storedBy.equals(CarbonContext.datasourceShortName))) {
+            sys.error("Not a carbon format request")
+          }
+
+          children.collect {
+            // collecting all the field  list
+            case list@Token("TOK_TABCOLLIST", _) =>
+              val cols = BaseSemanticAnalyzer.getColumns(list, true)
+              if (cols != null) {
+                val dupColsGrp = cols.asScala.groupBy(x => x.getName) filter {
+                  case (_, colList) => colList.size > 1
                 }
-                if ("decimal".equalsIgnoreCase(f.dataType.getOrElse(""))) {
-                  val (precision, scale) = getScaleAndPrecision(col.getType)
-                  f.precision = precision
-                  f.scale = scale
+                if (dupColsGrp.nonEmpty) {
+                  var columnName: String = ""
+                  dupColsGrp.toSeq.foreach(columnName += _._1 + ", ")
+                  columnName = columnName.substring(0, columnName.lastIndexOf(", "))
+                  val errorMessage = "Duplicate column name: " + columnName + " found in table " +
+                                     ".Please check create table statement."
+                  throw new MalformedCarbonCommandException(errorMessage)
                 }
-                fields ++= Seq(f)
+                cols.asScala.map { col =>
+                  val columnName = col.getName()
+                  val dataType = Option(col.getType)
+                  val name = Option(col.getName())
+                  // This is to parse complex data types
+                  val x = col.getName + ' ' + col.getType
+                  val f: Field = anyFieldDef(new lexical.Scanner(x))
+                  match {
+                    case Success(field, _) => field
+                    case failureOrError => throw new MalformedCarbonCommandException(
+                        s"Unsupported data type : $col.getType")
+                  }
+                  // the data type of the decimal type will be like decimal(10,0)
+                  // so checking the start of the string and taking the precision and scale.
+                  // resetting the data type with decimal
+                  if (f.dataType.getOrElse("").startsWith("decimal")) {
+                    val (precision, scale) = getScaleAndPrecision(col.getType)
+                    f.precision = precision
+                    f.scale = scale
+                    f.dataType = Some("decimal")
+                  }
+                  fields ++= Seq(f)
+                }
               }
-            }
 
-          case Token("TOK_IFNOTEXISTS", _) =>
-            ifNotExistPresent = true
+            case Token("TOK_IFNOTEXISTS", _) =>
+              ifNotExistPresent = true
 
-          case t@Token("TOK_TABNAME", _) =>
-            val (db, tblName) = extractDbNameTableName(t)
-            dbName = db
-            tableName = tblName.toLowerCase()
+            case t@Token("TOK_TABNAME", _) =>
+              val (db, tblName) = extractDbNameTableName(t)
+              dbName = db
+              tableName = tblName.toLowerCase()
 
-          case Token("TOK_TABLECOMMENT", child :: Nil) =>
-            tableComment = BaseSemanticAnalyzer.unescapeSQLString(child.getText)
+            case Token("TOK_TABLECOMMENT", child :: Nil) =>
+              tableComment = BaseSemanticAnalyzer.unescapeSQLString(child.getText)
 
-          case Token("TOK_TABLEPARTCOLS", list@Token("TOK_TABCOLLIST", _) :: Nil) =>
-            val cols = BaseSemanticAnalyzer.getColumns(list(0), false)
-            if (cols != null) {
-              cols.asScala.map { col =>
-                val columnName = col.getName()
-                val dataType = Option(col.getType)
-                val comment = col.getComment
-                val partitionCol = new PartitionerField(columnName, dataType, comment)
-                partitionCols ++= Seq(partitionCol)
+            case Token("TOK_TABLEPARTCOLS", list@Token("TOK_TABCOLLIST", _) :: Nil) =>
+              val cols = BaseSemanticAnalyzer.getColumns(list(0), false)
+              if (cols != null) {
+                cols.asScala.map { col =>
+                  val columnName = col.getName()
+                  val dataType = Option(col.getType)
+                  val comment = col.getComment
+                  val partitionCol = new PartitionerField(columnName, dataType, comment)
+                  partitionCols ++= Seq(partitionCol)
+                }
               }
-            }
-          case Token("TOK_TABLEPROPERTIES", list :: Nil) =>
-            tableProperties ++= getProperties(list)
+            case Token("TOK_TABLEPROPERTIES", list :: Nil) =>
+              val propertySeq: Seq[(String, String)] = getProperties(list)
+              val repeatedProperties = propertySeq.groupBy(_._1).filter(_._2.size > 1).keySet
+              if (repeatedProperties.nonEmpty) {
+                val repeatedPropStr: String = repeatedProperties.mkString(",")
+                throw new MalformedCarbonCommandException("Table properties is repeated: " +
+                  repeatedPropStr)
+              }
+              tableProperties ++= propertySeq
 
-          case Token("TOK_LIKETABLE", child :: Nil) =>
-            likeTableName = child.getChild(0).getText()
+            case Token("TOK_LIKETABLE", child :: Nil) =>
+              likeTableName = child.getChild(0).getText()
 
-          case Token("TOK_STORAGEHANDLER", child :: Nil) =>
-            storedBy = BaseSemanticAnalyzer.unescapeSQLString(child.getText)
+            case _ => // Unsupport features
+          }
 
-          case _ => // Unsupport features
+
+          // validate tblProperties
+          if (!CommonUtil.validateTblProperties(tableProperties, fields)) {
+            throw new MalformedCarbonCommandException("Invalid table properties")
+          }
+          // prepare table model of the collected tokens
+          val tableModel: tableModel = prepareTableModel(ifNotExistPresent,
+            dbName,
+            tableName,
+            fields,
+            partitionCols,
+            tableProperties)
+
+          // get logical plan.
+          CreateTable(tableModel)
         }
-
-        if (!storedBy.equals(CarbonContext.datasourceName)) {
-          // TODO: should execute by Hive instead of error
-          sys.error("Not a carbon format request")
+        catch {
+          case ce: MalformedCarbonCommandException =>
+            val message = if (tableName.isEmpty) "Create table command failed. "
+            else if (dbName.isEmpty) s"Create table command failed for $tableName. "
+            else s"Create table command failed for ${dbName.get}.$tableName. "
+            LOGGER.audit(message + ce.getMessage)
+            throw ce
         }
-
-      // validate tblProperties
-      if (!CommonUtil.validateTblProperties(tableProperties, fields)) {
-        throw new MalformedCarbonCommandException("Invalid table properties")
-      }
-      // prepare table model of the collected tokens
-      val tableModel: tableModel = prepareTableModel(ifNotExistPresent, dbName, tableName, fields,
-        partitionCols,
-        tableProperties)
-
-        // get logical plan.
-        CreateCube(tableModel)
 
     }
   }
@@ -419,7 +413,7 @@ class CarbonSqlParser()
    * @param node
    * @return LogicalPlan
    */
-  protected def nodeToPlanForAlterTable(node: Node): LogicalPlan = {
+  protected def nodeToPlanForAlterTable(node: Node, alterSql: String): LogicalPlan = {
     node match {
       // if create table taken is found then only we will handle.
       case Token("TOK_ALTERTABLE", children) =>
@@ -441,14 +435,8 @@ class CarbonSqlParser()
           case _ => // Unsupport features
         }
 
-        if (compactionType.equalsIgnoreCase("minor") || compactionType.equalsIgnoreCase("major")) {
-          val altertablemodel = AlterTableModel(dbName, tableName, compactionType)
-          AlterTableCompaction(altertablemodel)
-        }
-        else {
-          sys.error("Invalid compaction type, supported values are 'major' and 'minor'")
-        }
-
+        val altertablemodel = AlterTableModel(dbName, tableName, compactionType, alterSql)
+        AlterTableCompaction(altertablemodel)
     }
   }
 
@@ -469,8 +457,15 @@ class CarbonSqlParser()
                                   tableProperties: Map[String, String]): tableModel
   = {
 
-    var (dims: Seq[Field], noDictionaryDims: Seq[String]) = extractDimColsAndNoDictionaryFields(
+    val (dims: Seq[Field], noDictionaryDims: Seq[String]) = extractDimColsAndNoDictionaryFields(
       fields, tableProperties)
+    if (dims.isEmpty) {
+      throw new MalformedCarbonCommandException(s"Table ${dbName.getOrElse(
+        CarbonCommonConstants.DATABASE_DEFAULT_NAME)}.$tableName"
+        + " can not be created without key columns. Please use DICTIONARY_INCLUDE or " +
+        "DICTIONARY_EXCLUDE to set at least one key column " +
+        "if all specified columns are numeric types")
+    }
     val msrs: Seq[Field] = extractMsrColsFromFields(fields, tableProperties)
 
     // column properties
@@ -479,13 +474,23 @@ class CarbonSqlParser()
     val groupCols: Seq[String] = updateColumnGroupsInField(tableProperties,
         noDictionaryDims, msrs, dims)
 
+    // get no inverted index columns from table properties.
+    val noInvertedIdxCols = extractNoInvertedIndexColumns(fields, tableProperties)
+
+    // get trim columns from table properties.
+    val TrimCols = extractTrimColumns(fields, tableProperties)
+
     val partitioner: Option[Partitioner] = getPartitionerObject(partitionCols, tableProperties)
+    // validate the tableBlockSize from table properties
+    CommonUtil.validateTableBlockSize(tableProperties)
 
     tableModel(ifNotExistPresent,
-      dbName.getOrElse("default"), dbName, tableName,
+      dbName.getOrElse(CarbonCommonConstants.DATABASE_DEFAULT_NAME),
+      dbName, tableName, tableProperties,
       reorderDimensions(dims.map(f => normalizeType(f)).map(f => addParent(f))),
       msrs.map(f => normalizeType(f)), "", null, "",
-      None, Seq(), null, Option(noDictionaryDims), null, partitioner, groupCols, Some(colProps))
+      None, Seq(), null, Option(noDictionaryDims), Option(noInvertedIdxCols),
+      Option(TrimCols), null, partitioner, groupCols, Some(colProps))
   }
 
   /**
@@ -499,7 +504,7 @@ class CarbonSqlParser()
       noDictionaryDims: Seq[String],
       msrs: Seq[Field],
       dims: Seq[Field]): Seq[String] = {
-    if (None != tableProperties.get(CarbonCommonConstants.COLUMN_GROUPS)) {
+    if (tableProperties.get(CarbonCommonConstants.COLUMN_GROUPS).isDefined) {
 
       var splittedColGrps: Seq[String] = Seq[String]()
       val nonSplitCols: String = tableProperties.get(CarbonCommonConstants.COLUMN_GROUPS).get
@@ -515,7 +520,7 @@ class CarbonSqlParser()
         splittedColGrps :+= arrangedColGrp
       }
       // This will  be furthur handled.
-      splittedColGrps
+      CommonUtil.arrangeColGrpsInSchemaOrder(splittedColGrps, dims)
     }
     else {
       null
@@ -548,7 +553,7 @@ class CarbonSqlParser()
       true
     }
     val colGrpNames: StringBuilder = StringBuilder.newBuilder
-    for (i <- 0 until colGrpFieldIndx.length) {
+    for (i <- colGrpFieldIndx.indices) {
       colGrpNames.append(dims(colGrpFieldIndx(i)).column)
       if (i < (colGrpFieldIndx.length - 1)) {
         colGrpNames.append(",")
@@ -556,7 +561,6 @@ class CarbonSqlParser()
     }
     colGrpNames.toString()
   }
-
 
   /**
    * For getting the partitioner Object
@@ -570,15 +574,15 @@ class CarbonSqlParser()
   Option[Partitioner] = {
 
     // by default setting partition class empty.
-    // later in cube schema it is setting to default value.
+    // later in table schema it is setting to default value.
     var partitionClass: String = ""
     var partitionCount: Int = 1
     var partitionColNames: Array[String] = Array[String]()
-    if (None != tableProperties.get(CarbonCommonConstants.PARTITIONCLASS)) {
+    if (tableProperties.get(CarbonCommonConstants.PARTITIONCLASS).isDefined) {
       partitionClass = tableProperties.get(CarbonCommonConstants.PARTITIONCLASS).get
     }
 
-    if (None != tableProperties.get(CarbonCommonConstants.PARTITIONCOUNT)) {
+    if (tableProperties.get(CarbonCommonConstants.PARTITIONCOUNT).isDefined) {
       try {
         partitionCount = tableProperties.get(CarbonCommonConstants.PARTITIONCOUNT).get.toInt
       } catch {
@@ -629,14 +633,14 @@ class CarbonSqlParser()
     colPropMap: java.util.HashMap[String, java.util.List[ColumnProperty]]) {
     val (tblPropKey, colProKey) = getKey(parentColumnName, columnName)
     val colProps = CommonUtil.getColumnProperties(tblPropKey, tableProperties)
-    if (None != colProps) {
+    if (colProps.isDefined) {
       colPropMap.put(colProKey, colProps.get)
     }
   }
 
   def getKey(parentColumnName: Option[String],
     columnName: String): (String, String) = {
-    if (None != parentColumnName) {
+    if (parentColumnName.isDefined) {
       if (columnName == "val") {
         (parentColumnName.get, parentColumnName.get + "." + columnName)
       } else {
@@ -646,6 +650,84 @@ class CarbonSqlParser()
       (columnName, columnName)
     }
   }
+  /**
+   * This will extract the no inverted columns fields.
+   * By default all dimensions use inverted index.
+   *
+   * @param fields
+   * @param tableProperties
+   * @return
+   */
+  protected def extractNoInvertedIndexColumns(fields: Seq[Field],
+    tableProperties: Map[String, String]):
+  Seq[String] = {
+    // check whether the column name is in fields
+    var noInvertedIdxColsProps: Array[String] = Array[String]()
+    var noInvertedIdxCols: Seq[String] = Seq[String]()
+
+    if (tableProperties.get("NO_INVERTED_INDEX").isDefined) {
+      noInvertedIdxColsProps =
+        tableProperties.get("NO_INVERTED_INDEX").get.split(',').map(_.trim)
+      noInvertedIdxColsProps
+        .map { noInvertedIdxColProp =>
+        if (!fields.exists(x => x.column.equalsIgnoreCase(noInvertedIdxColProp))) {
+          val errormsg = "NO_INVERTED_INDEX column: " + noInvertedIdxColProp +
+            " does not exist in table. Please check create table statement."
+          throw new MalformedCarbonCommandException(errormsg)
+        }
+      }
+    }
+    // check duplicate columns and only 1 col left
+    val distinctCols = noInvertedIdxColsProps.toSet
+    // extract the no inverted index columns
+    fields.foreach( field => {
+      if (distinctCols.exists(x => x.equalsIgnoreCase(field.column))) {
+        noInvertedIdxCols :+= field.column
+      }
+    }
+    )
+    noInvertedIdxCols
+  }
+
+  /**
+   * This will extract the trim columns fields.
+   * By default all dimensions are no trim.
+   *
+   * @param fields
+   * @param tableProperties
+   * @return
+   */
+  protected def extractTrimColumns(fields: Seq[Field],
+                                        tableProperties: Map[String, String]):
+  Seq[String] = {
+    // check whether the column name is in fields
+    var trimColsProps: Array[String] = Array[String]()
+    var trimCols: Seq[String] = Seq[String]()
+
+    if (tableProperties.get("trim").isDefined) {
+      trimColsProps =
+        tableProperties.get("trim").get.split(',').map(_.trim)
+      trimColsProps
+        .map { trimColsProp =>
+          if (!fields.exists(x => x.column.equalsIgnoreCase(trimColsProp))) {
+            val errormsg = "TRIM column: " + trimColsProp +
+              " does not exist in table. Please check create table statement."
+            throw new MalformedCarbonCommandException(errormsg)
+          }
+        }
+    }
+    // check duplicate columns and only 1 col left
+    val distinctCols = trimColsProps.toSet
+    // extract the trim columns
+    fields.foreach( field => {
+      if (distinctCols.exists(x => x.equalsIgnoreCase(field.column))) {
+        trimCols :+= field.column
+      }
+    }
+    )
+    trimCols
+  }
+
   /**
    * This will extract the Dimensions and NoDictionary Dimensions fields.
    * By default all string cols are dimensions.
@@ -679,7 +761,7 @@ class CarbonSqlParser()
               val errormsg = "DICTIONARY_EXCLUDE is unsupported for complex datatype column: " +
                 dictExcludeCol
               throw new MalformedCarbonCommandException(errormsg)
-            } else if (isDoubleDecimalColDictionaryExclude(dataType)) {
+            } else if (!isStringAndTimestampColDictionaryExclude(dataType)) {
               val errorMsg = "DICTIONARY_EXCLUDE is unsupported for " + dataType.toLowerCase() +
                 " data type column: " + dictExcludeCol
               throw new MalformedCarbonCommandException(errorMsg)
@@ -768,8 +850,8 @@ class CarbonSqlParser()
    /**
     * detects whether double or decimal column is part of dictionary_exclude
     */
-  def isDoubleDecimalColDictionaryExclude(columnDataType: String): Boolean = {
-    val dataTypes = Array("double", "decimal")
+  def isStringAndTimestampColDictionaryExclude(columnDataType: String): Boolean = {
+    val dataTypes = Array("string", "timestamp")
     dataTypes.exists(x => x.equalsIgnoreCase(columnDataType))
   }
 
@@ -787,13 +869,13 @@ class CarbonSqlParser()
     var dictExcludedCols: Array[String] = Array[String]()
 
     // get all included cols
-    if (None != tableProperties.get(CarbonCommonConstants.DICTIONARY_INCLUDE)) {
+    if (tableProperties.get(CarbonCommonConstants.DICTIONARY_INCLUDE).isDefined) {
       dictIncludedCols =
         tableProperties.get(CarbonCommonConstants.DICTIONARY_INCLUDE).get.split(',').map(_.trim)
     }
 
     // get all excluded cols
-    if (None != tableProperties.get(CarbonCommonConstants.DICTIONARY_EXCLUDE)) {
+    if (tableProperties.get(CarbonCommonConstants.DICTIONARY_EXCLUDE).isDefined) {
       dictExcludedCols =
         tableProperties.get(CarbonCommonConstants.DICTIONARY_EXCLUDE).get.split(',').map(_.trim)
     }
@@ -881,28 +963,31 @@ class CarbonSqlParser()
     case other => other
   }
 
-
   protected lazy val loadDataNew: Parser[LogicalPlan] =
     LOAD ~> DATA ~> opt(LOCAL) ~> INPATH ~> stringLit ~ opt(OVERWRITE) ~
       (INTO ~> TABLE ~> (ident <~ ".").? ~ ident) ~
       (OPTIONS ~> "(" ~> repsep(loadOptions, ",") <~ ")").? <~ opt(";") ^^ {
-        case filePath ~ isOverwrite ~ cube ~ partionDataOptions =>
-          val (schema, cubename) = cube match {
-            case schemaName ~ cubeName => (schemaName, cubeName.toLowerCase())
+        case filePath ~ isOverwrite ~ table ~ optionsList =>
+          val (databaseNameOp, tableName) = table match {
+            case databaseName ~ tableName => (databaseName, tableName.toLowerCase())
           }
-          if(partionDataOptions.isDefined) {
-            validateOptions(partionDataOptions)
+          if(optionsList.isDefined) {
+            validateOptions(optionsList)
           }
-          val patitionOptionsMap = partionDataOptions.getOrElse(List.empty[(String, String)]).toMap
-          LoadTable(schema, cubename, filePath, Seq(), patitionOptionsMap, isOverwrite.isDefined)
+          val optionsMap = optionsList.getOrElse(List.empty[(String, String)]).toMap
+          val useKettle = optionsMap.getOrElse("USE_KETTLE", "true").toBoolean
+          LoadTable(databaseNameOp, tableName, filePath, Seq(), optionsMap,
+            isOverwrite.isDefined, useKettle = useKettle)
       }
 
-  private def validateOptions(partionDataOptions: Option[List[(String, String)]]): Unit = {
+  private def validateOptions(optionList: Option[List[(String, String)]]): Unit = {
 
     // validate with all supported options
-    val options = partionDataOptions.get.groupBy(x => x._1)
+    val options = optionList.get.groupBy(x => x._1)
     val supportedOptions = Seq("DELIMITER", "QUOTECHAR", "FILEHEADER", "ESCAPECHAR", "MULTILINE",
-      "COMPLEX_DELIMITER_LEVEL_1", "COMPLEX_DELIMITER_LEVEL_2"
+      "COMPLEX_DELIMITER_LEVEL_1", "COMPLEX_DELIMITER_LEVEL_2", "COLUMNDICT",
+      "SERIALIZATION_NULL_FORMAT", "BAD_RECORDS_LOGGER_ENABLE", "BAD_RECORDS_ACTION",
+      "ALL_DICTIONARY_PATH", "MAXCOLUMNS", "COMMENTCHAR", "USE_KETTLE", "DATEFORMAT"
     )
     var isSupported = true
     val invalidOptions = StringBuilder.newBuilder
@@ -919,12 +1004,31 @@ class CarbonSqlParser()
       throw new MalformedCarbonCommandException(errorMessage)
     }
 
+    //  COLUMNDICT and ALL_DICTIONARY_PATH can not be used together.
+    if (options.exists(_._1.equalsIgnoreCase("COLUMNDICT")) &&
+      options.exists(_._1.equalsIgnoreCase("ALL_DICTIONARY_PATH"))) {
+      val errorMessage = "Error: COLUMNDICT and ALL_DICTIONARY_PATH can not be used together" +
+        " in options"
+      throw new MalformedCarbonCommandException(errorMessage)
+    }
+
+    if (options.exists(_._1.equalsIgnoreCase("MAXCOLUMNS"))) {
+      val maxColumns: String = options.get("maxcolumns").get(0)._2
+      try {
+        maxColumns.toInt
+      } catch {
+        case ex: NumberFormatException =>
+          throw new MalformedCarbonCommandException(
+            "option MAXCOLUMNS can only contain integer values")
+      }
+    }
+
     // check for duplicate options
     val duplicateOptions = options filter {
       case (_, optionlist) => optionlist.size > 1
     }
     val duplicates = StringBuilder.newBuilder
-    if (duplicateOptions.size > 0) {
+    if (duplicateOptions.nonEmpty) {
       duplicateOptions.foreach(x => {
         duplicates.append(x._1)
       }
@@ -944,46 +1048,29 @@ class CarbonSqlParser()
         }
     }
 
-  protected lazy val tableFileMapping: Parser[DataLoadTableFileMapping] =
-    (ident <~ ":") ~ stringLit ^^ {
-      case tableName ~ dataPath => DataLoadTableFileMapping(tableName, dataPath)
-    }
-
-  protected lazy val partitionOptions: Parser[(String, String)] =
-    ((DELIMITER ~ stringLit) | (QUOTECHAR ~ stringLit) | (FILEHEADER ~ stringLit) |
-      (ESCAPECHAR ~ stringLit) | (MULTILINE ~ stringLit) |
-      (COMPLEX_DELIMITER_LEVEL_1 ~ stringLit) | (COMPLEX_DELIMITER_LEVEL_2 ~ stringLit)) ^^ {
-      case opt ~ optvalue => (opt, optvalue)
-      case _ => ("", "")
-    }
-
   protected lazy val loadOptions: Parser[(String, String)] =
     (stringLit <~ "=") ~ stringLit ^^ {
       case opt ~ optvalue => (opt.trim.toLowerCase(), optvalue)
       case _ => ("", "")
     }
 
-  protected lazy val showCube: Parser[LogicalPlan] =
-    SHOW ~> CUBES ~> (IN ~> ident).? ~ (DETAIL).? <~ opt(";") ^^ {
-      case schema ~ detail =>
-        if (detail.isDefined) {
-          ShowTablesDetailedCommand(schema)
-        } else {
-          ShowCubeCommand(schema)
-        }
-    }
-  protected lazy val showAllCubes: Parser[LogicalPlan] =
-    SHOW ~> ALL ~> CUBES <~ opt(";") ^^ {
-      case _ => ShowAllCubeCommand()
-    }
-
 
   protected lazy val dimCol: Parser[Field] = anyFieldDef
 
   protected lazy val primitiveTypes =
-    "(?i)string".r ^^^ "string" | "(?i)integer".r ^^^ "integer" | "(?i)timestamp".r ^^^
-    "timestamp" | "(?i)numeric".r ^^^ "numeric" | "(?i)bigint".r ^^^ "bigint" |
-    "(?i)decimal".r ^^^ "decimal" | "(?i)int".r ^^^ "int" | "(?i)double".r ^^^ "double"
+    STRING ^^^ "string" | INTEGER ^^^ "integer" | TIMESTAMP ^^^
+    "timestamp" | NUMERIC ^^^ "numeric" | BIGINT ^^^ "bigint" |
+       INT ^^^ "int" | DOUBLE ^^^ "double" | decimalType
+
+  /**
+   * Matching the decimal(10,0) data type and returning the same.
+   */
+  private lazy val decimalType =
+    DECIMAL ~ ("(" ~> numericLit <~",") ~ (numericLit <~ ")")  ^^ {
+      case decimal ~ precision ~scale =>
+        s"$decimal($precision, $scale)"
+    }
+
   protected lazy val nestedType: Parser[Field] = structFieldType | arrayFieldType |
     primitiveFieldType
 
@@ -1000,7 +1087,7 @@ class CarbonSqlParser()
     }
 
   protected lazy val arrayFieldType: Parser[Field] =
-    (("(?i)array".r ^^^ "array") ~> "<" ~> nestedType <~ ">") ^^ {
+    ((ARRAY ^^^ "array") ~> "<" ~> nestedType <~ ">") ^^ {
       case e1 =>
         Field("unknown", Some("array"), Some("unknown"),
           Some(List(Field("val", e1.dataType, Some("val"),
@@ -1008,81 +1095,16 @@ class CarbonSqlParser()
     }
 
   protected lazy val structFieldType: Parser[Field] =
-    (("(?i)struct".r ^^^ "struct") ~> "<" ~> repsep(anyFieldDef, ",") <~ ">") ^^ {
+    ((STRUCT ^^^ "struct") ~> "<" ~> repsep(anyFieldDef, ",") <~ ">") ^^ {
       case e1 =>
         Field("unknown", Some("struct"), Some("unknown"), Some(e1))
     }
 
   protected lazy val measureCol: Parser[Field] =
-    (ident | stringLit) ~ ("(?i)integer".r ^^^ "integer" | "(?i)numeric".r ^^^ "numeric" |
-      "(?i)bigint".r ^^^ "bigint" | "(?i)decimal".r ^^^ "decimal").? ~
+    (ident | stringLit) ~ (INTEGER ^^^ "integer" | NUMERIC ^^^ "numeric" |
+      BIGINT ^^^ "bigint" | DECIMAL ^^^ "decimal").? ~
       (AS ~> (ident | stringLit)).? ~ (IN ~> (ident | stringLit)).? ^^ {
       case e1 ~ e2 ~ e3 ~ e4 => Field(e1, e2, e3, Some(null))
-    }
-
-  protected lazy val dimCols: Parser[Seq[Field]] = rep1sep(dimCol, ",")
-
-  protected lazy val measureCols: Parser[Seq[Field]] = rep1sep(measureCol, ",")
-
-  protected lazy val expressions: Parser[Seq[FieldMapping]] = repsep(expsr, ",")
-
-  protected lazy val aggExpressions: Parser[Seq[Aggregation]] = repsep(aggExpsr, ",")
-
-  protected lazy val expsr: Parser[FieldMapping] =
-    ((ident | stringLit) ~ ("=" ~> (ident | stringLit))) ^^ {
-      case e1 ~ e2 => FieldMapping(e1, e2)
-    }
-
-  protected lazy val aggExpsr: Parser[Aggregation] =
-    ((ident | stringLit) ~ ("=" ~> (SUM | COUNT | AVG | MIN | MAX | ABS))) ^^ {
-      case e1 ~ e2 => Aggregation(e1, e2)
-      case _ => sys.error("Invalid Aggregator type")
-    }
-
-  protected lazy val cardinalityExprs: Parser[Seq[Cardinality]] = repsep(numericExprs, ",")
-
-  protected lazy val numericExprs: Parser[Cardinality] =
-    ((ident | stringLit) ~ ("=" ~> numericLit)) ^^ {
-      case e1 ~ e2 => Cardinality(e1, e2.toInt)
-    }
-
-  protected lazy val columns: Parser[Option[Seq[FieldMapping]]] =
-    opt("(" ~> expressions <~ ")")
-
-  protected lazy val cardinality: Parser[Option[Seq[Cardinality]]] =
-    opt(CARDINALITY ~> ("[" ~> cardinalityExprs <~ "]"))
-
-  protected lazy val aggregation: Parser[Seq[Aggregation]] =
-    AGGREGATION ~> ("[" ~> aggExpressions <~ "]")
-  protected lazy val noDictionaryDims: Parser[Option[Seq[String]]] =
-    HIGH_CARDINALITY_DIMS ~> ("(" ~> repsep((ident | stringLit), ",") <~ ")") ^^ {
-      case hc =>
-        Some(hc)
-      case _ => None
-
-    }
-
-  protected lazy val partitioner: Parser[Partitioner] =
-    PARTITIONER ~> "[" ~> opt(CLASS ~> "=" ~> stringLit) ~
-      opt(",".? ~> COLUMNS ~> "=" ~> "(" ~> rep1sep((ident | stringLit), ",") <~ ")") ~
-      (",".? ~> PARTITION_COUNT ~> "=" ~> numericLit) <~ "]" ^^ {
-      case partitionerClass ~ columns ~ count =>
-        Partitioner(partitionerClass.getOrElse(""),
-          columns.getOrElse(List("")).toArray, count.toInt, null)
-    }
-
-  protected lazy val hierarchies: Parser[Option[Seq[HierarchyMapping]]] =
-    opt(HIERARCHIES ~> ("[" ~> repsep(hierarchy, ",") <~ "]"))
-
-  protected lazy val hierarchy: Parser[HierarchyMapping] =
-    (ident ~ (TYPE ~> "=" ~> ident).?) ~
-      (LEVELS ~> "{" ~> repsep((ident | stringLit), ",") <~ "}") ^^ {
-      case hierName ~ hierType ~ levels =>
-        var dimType = "StandardDimension"
-        if (hierType.getOrElse(dimType).equalsIgnoreCase("time")) {
-          dimType = "TimeDimension"
-        }
-        HierarchyMapping(hierName, dimType, levels)
     }
 
   protected lazy val describeTable: Parser[LogicalPlan] =
@@ -1092,7 +1114,7 @@ class CarbonSqlParser()
           case Some(dbName) =>
             TableIdentifier(tbl.toLowerCase, Some(dbName))
           case None =>
-            TableIdentifier(tbl.toLowerCase)
+            TableIdentifier(tbl.toLowerCase, None)
         }
         if (ef.isDefined && "FORMATTED".equalsIgnoreCase(ef.get)) {
           new DescribeFormattedCommand("describe formatted " + tblIdentifier,
@@ -1103,30 +1125,55 @@ class CarbonSqlParser()
         }
     }
   private def normalizeType(field: Field): Field = {
-    field.dataType.getOrElse("NIL") match {
+    val dataType = field.dataType.getOrElse("NIL")
+    dataType match {
       case "string" => Field(field.column, Some("String"), field.name, Some(null), field.parent,
-        field.storeType)
+        field.storeType
+      )
       case "integer" | "int" => Field(field.column, Some("Integer"), field.name, Some(null),
-        field.parent, field.storeType)
+        field.parent, field.storeType
+      )
       case "long" => Field(field.column, Some("Long"), field.name, Some(null), field.parent,
-        field.storeType)
+        field.storeType
+      )
       case "double" => Field(field.column, Some("Double"), field.name, Some(null), field.parent,
-        field.storeType)
+        field.storeType
+      )
       case "timestamp" => Field(field.column, Some("Timestamp"), field.name, Some(null),
-        field.parent, field.storeType)
+        field.parent, field.storeType
+      )
       case "numeric" => Field(field.column, Some("Numeric"), field.name, Some(null), field.parent,
-        field.storeType)
+        field.storeType
+      )
       case "array" => Field(field.column, Some("Array"), field.name,
         field.children.map(f => f.map(normalizeType(_))),
-        field.parent, field.storeType)
+        field.parent, field.storeType
+      )
       case "struct" => Field(field.column, Some("Struct"), field.name,
         field.children.map(f => f.map(normalizeType(_))),
-        field.parent, field.storeType)
+        field.parent, field.storeType
+      )
       case "bigint" => Field(field.column, Some("BigInt"), field.name, Some(null), field.parent,
-        field.storeType)
+        field.storeType
+      )
       case "decimal" => Field(field.column, Some("Decimal"), field.name, Some(null), field.parent,
-        field.storeType, field.precision, field.scale)
-      case _ => field
+        field.storeType, field.precision, field.scale
+      )
+      // checking if the nested data type contains the child type as decimal(10,0),
+      // if it is present then extracting the precision and scale. resetting the data type
+      // with Decimal.
+      case _ if (dataType.startsWith("decimal")) =>
+        val (precision, scale) = getScaleAndPrecision(dataType)
+        Field(field.column,
+          Some("Decimal"),
+          field.name,
+          Some(null),
+          field.parent,
+          field.storeType, precision,
+          scale
+        )
+      case _ =>
+        field
     }
   }
 
@@ -1176,11 +1223,11 @@ class CarbonSqlParser()
   }
 
   protected lazy val showLoads: Parser[LogicalPlan] =
-    SHOW ~> (LOADS|SEGMENTS) ~> FOR ~> TABLE ~> (ident <~ ".").? ~ ident ~
+    SHOW ~> SEGMENTS ~> FOR ~> TABLE ~> (ident <~ ".").? ~ ident ~
       (LIMIT ~> numericLit).? <~
       opt(";") ^^ {
-      case schemaName ~ cubeName ~ limit =>
-        ShowLoadsCommand(schemaName, cubeName.toLowerCase(), limit)
+      case databaseName ~ tableName ~ limit =>
+        ShowLoadsCommand(databaseName, tableName.toLowerCase(), limit)
     }
 
   protected lazy val segmentId: Parser[String] =
@@ -1190,28 +1237,43 @@ class CarbonSqlParser()
         p.getClass.getSimpleName.equals("DecimalLit") } ) ^^ (_.chars)
 
   protected lazy val deleteLoadsByID: Parser[LogicalPlan] =
-    DELETE ~> (LOAD|SEGMENT) ~> repsep(segmentId, ",") ~ (FROM ~> TABLE ~>
+    DELETE ~> SEGMENT ~> repsep(segmentId, ",") ~ (FROM ~> TABLE ~>
       (ident <~ ".").? ~ ident) <~
       opt(";") ^^ {
-      case loadids ~ cube => cube match {
-        case schemaName ~ cubeName => DeleteLoadsById(loadids, schemaName, cubeName.toLowerCase())
+      case loadids ~ table => table match {
+        case databaseName ~ tableName =>
+          DeleteLoadsById(loadids, databaseName, tableName.toLowerCase())
       }
     }
 
   protected lazy val deleteLoadsByLoadDate: Parser[LogicalPlan] =
-    DELETE ~> (LOADS|SEGMENTS) ~> FROM ~> TABLE ~> (ident <~ ".").? ~ ident ~
+    DELETE ~> SEGMENTS ~> FROM ~> TABLE ~> (ident <~ ".").? ~ ident ~
       (WHERE ~> (STARTTIME <~ BEFORE) ~ stringLit) <~
       opt(";") ^^ {
-      case schema ~ cube ~ condition =>
+      case schema ~ table ~ condition =>
         condition match {
           case dateField ~ dateValue =>
-            DeleteLoadsByLoadDate(schema, cube.toLowerCase(), dateField, dateValue)
+            DeleteLoadsByLoadDate(schema, table.toLowerCase(), dateField, dateValue)
         }
     }
 
   protected lazy val cleanFiles: Parser[LogicalPlan] =
     CLEAN ~> FILES ~> FOR ~> TABLE ~> (ident <~ ".").? ~ ident <~ opt(";") ^^ {
-      case schemaName ~ cubeName => CleanFiles(schemaName, cubeName.toLowerCase())
+      case databaseName ~ tableName => CleanFiles(databaseName, tableName.toLowerCase())
     }
 
+  protected lazy val explainPlan: Parser[LogicalPlan] =
+    (EXPLAIN ~> opt(EXTENDED)) ~ startCommand ^^ {
+      case isExtended ~ logicalPlan =>
+        logicalPlan match {
+          case plan: CreateTable => ExplainCommand(logicalPlan, extended = isExtended.isDefined)
+          case _ => ExplainCommand(OneRowRelation)
+      }
+    }
+
+  protected lazy val dropDatabaseCascade: Parser[LogicalPlan] =
+    DROP ~> (DATABASE|SCHEMA) ~> opt(IF ~> EXISTS) ~> ident ~> CASCADE <~ opt(";") ^^ {
+      case cascade => throw new MalformedCarbonCommandException(
+          "Unsupported cascade operation in drop database/schema command")
+    }
 }

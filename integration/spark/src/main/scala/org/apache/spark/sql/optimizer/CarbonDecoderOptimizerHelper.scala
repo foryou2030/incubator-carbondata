@@ -22,22 +22,34 @@ import java.util
 import scala.collection.JavaConverters._
 import scala.collection.mutable
 
-import org.apache.spark.sql.catalyst.expressions.Attribute
+import org.apache.spark.sql.catalyst.expressions.{Attribute, ExprId}
 import org.apache.spark.sql.catalyst.plans.logical._
 
 abstract class AbstractNode
 
 case class Node(cd: CarbonDictionaryTempDecoder) extends AbstractNode
 
-case class JoinNode(left: util.List[AbstractNode], right: util.List[AbstractNode])
+case class BinaryCarbonNode(left: util.List[AbstractNode], right: util.List[AbstractNode])
   extends AbstractNode
 
 case class CarbonDictionaryTempDecoder(
-    attrList: util.Set[Attribute],
-    attrsNotDecode: util.Set[Attribute],
+    attrList: util.Set[AttributeReferenceWrapper],
+    attrsNotDecode: util.Set[AttributeReferenceWrapper],
     child: LogicalPlan,
     isOuter: Boolean = false) extends UnaryNode {
   var processed = false
+
+  def getAttrsNotDecode: util.Set[Attribute] = {
+    val set = new util.HashSet[Attribute]()
+    attrsNotDecode.asScala.foreach(f => set.add(f.attr))
+    set
+  }
+
+  def getAttrList: util.Set[Attribute] = {
+    val set = new util.HashSet[Attribute]()
+    attrList.asScala.foreach(f => set.add(f.attr))
+    set
+  }
 
   override def output: Seq[Attribute] = child.output
 }
@@ -58,7 +70,7 @@ class CarbonDecoderProcessor {
       case j: BinaryNode =>
         val leftList = new util.ArrayList[AbstractNode]
         val rightList = new util.ArrayList[AbstractNode]
-        nodeList.add(JoinNode(leftList, rightList))
+        nodeList.add(BinaryCarbonNode(leftList, rightList))
         process(j.left, leftList)
         process(j.right, rightList)
       case e: UnaryNode => process(e.child, nodeList)
@@ -68,20 +80,20 @@ class CarbonDecoderProcessor {
 
   def updateDecoders(nodeList: util.List[AbstractNode]): Unit = {
     val scalaList = nodeList.asScala
-    val decoderNotDecode = new util.HashSet[Attribute]
+    val decoderNotDecode = new util.HashSet[AttributeReferenceWrapper]
     updateDecoderInternal(scalaList, decoderNotDecode)
   }
 
   private def updateDecoderInternal(scalaList: mutable.Buffer[AbstractNode],
-      decoderNotDecode: util.HashSet[Attribute]): Unit = {
+      decoderNotDecode: util.HashSet[AttributeReferenceWrapper]): Unit = {
     scalaList.reverseMap {
       case Node(cd: CarbonDictionaryTempDecoder) =>
         decoderNotDecode.asScala.foreach(cd.attrsNotDecode.add)
         decoderNotDecode.asScala.foreach(cd.attrList.remove)
         decoderNotDecode.addAll(cd.attrList)
-      case JoinNode(left: util.List[AbstractNode], right: util.List[AbstractNode]) =>
-        val leftNotDecode = new util.HashSet[Attribute]
-        val rightNotDecode = new util.HashSet[Attribute]
+      case BinaryCarbonNode(left: util.List[AbstractNode], right: util.List[AbstractNode]) =>
+        val leftNotDecode = new util.HashSet[AttributeReferenceWrapper]
+        val rightNotDecode = new util.HashSet[AttributeReferenceWrapper]
         updateDecoderInternal(left.asScala, leftNotDecode)
         updateDecoderInternal(right.asScala, rightNotDecode)
         decoderNotDecode.addAll(leftNotDecode)
@@ -91,26 +103,39 @@ class CarbonDecoderProcessor {
 
 }
 
-case class Marker(set: util.Set[Attribute], join: Boolean = false)
+case class AttributeReferenceWrapper(attr: Attribute) {
+
+  override def equals(other: Any): Boolean = other match {
+    case ar: AttributeReferenceWrapper =>
+      attr.name.equalsIgnoreCase(ar.attr.name) && attr.exprId == ar.attr.exprId
+    case _ => false
+  }
+
+  // constant hash value
+  lazy val hash = (attr.name.toLowerCase + "." + attr.exprId.id).hashCode
+  override def hashCode: Int = hash
+}
+
+case class Marker(set: util.Set[AttributeReferenceWrapper], binary: Boolean = false)
 
 class CarbonPlanMarker {
   val markerStack = new util.Stack[Marker]
   var joinCount = 0
 
-  def pushMarker(attrs: util.Set[Attribute]): Unit = {
+  def pushMarker(attrs: util.Set[AttributeReferenceWrapper]): Unit = {
     markerStack.push(Marker(attrs))
   }
 
-  def pushJoinMarker(attrs: util.Set[Attribute]): Unit = {
-    markerStack.push(Marker(attrs, join = true))
+  def pushBinaryMarker(attrs: util.Set[AttributeReferenceWrapper]): Unit = {
+    markerStack.push(Marker(attrs, binary = true))
     joinCount = joinCount + 1
   }
 
-  def revokeJoin(): util.Set[Attribute] = {
+  def revokeJoin(): util.Set[AttributeReferenceWrapper] = {
     if (joinCount > 0) {
       while (!markerStack.empty()) {
         val marker = markerStack.pop()
-        if (marker.join) {
+        if (marker.binary) {
           joinCount = joinCount - 1
           return marker.set
         }

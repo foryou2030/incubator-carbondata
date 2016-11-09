@@ -19,10 +19,10 @@ package org.apache.spark.util
 
 import org.apache.spark.Logging
 
-import org.carbondata.core.constants.CarbonCommonConstants
-import org.carbondata.core.datastorage.store.filesystem.CarbonFile
-import org.carbondata.core.datastorage.store.impl.FileFactory
-import org.carbondata.processing.etl.DataLoadingException
+import org.apache.carbondata.core.constants.CarbonCommonConstants
+import org.apache.carbondata.core.datastorage.store.filesystem.CarbonFile
+import org.apache.carbondata.core.datastorage.store.impl.FileFactory
+import org.apache.carbondata.processing.etl.DataLoadingException
 
 object FileUtils extends Logging {
   /**
@@ -43,10 +43,8 @@ object FileUtils extends Logging {
       } else if (fileName.startsWith(CarbonCommonConstants.UNDERSCORE) ||
           fileName.startsWith(CarbonCommonConstants.POINT)) {
         logWarning(s"skip invisible input file: $path")
-      } else if (fileName.toLowerCase().endsWith(".csv")) {
-        stringBuild.append(path.replace('\\', '/')).append(CarbonCommonConstants.COMMA)
       } else {
-        logWarning(s"skip input file: $path, because this path doesn't end with '.csv'")
+        stringBuild.append(path.replace('\\', '/')).append(CarbonCommonConstants.COMMA)
       }
     }
   }
@@ -57,7 +55,7 @@ object FileUtils extends Logging {
    */
   def getPaths(inputPath: String): String = {
     if (inputPath == null || inputPath.isEmpty) {
-      throw new DataLoadingException("input file path cannot be empty.")
+      throw new DataLoadingException("Input file path cannot be empty.")
     } else {
       val stringBuild = new StringBuilder()
       val filePaths = inputPath.split(",")
@@ -65,14 +63,14 @@ object FileUtils extends Logging {
         val fileType = FileFactory.getFileType(filePaths(i))
         val carbonFile = FileFactory.getCarbonFile(filePaths(i), fileType)
         if (!carbonFile.exists()) {
-          throw new DataLoadingException(s"the input file does not exist: ${filePaths(i)}" )
+          throw new DataLoadingException(s"The input file does not exist: ${filePaths(i)}" )
         }
         getPathsFromCarbonFile(carbonFile, stringBuild)
       }
       if (stringBuild.nonEmpty) {
         stringBuild.substring(0, stringBuild.size - 1)
       } else {
-        throw new DataLoadingException("please check your input path and make sure " +
+        throw new DataLoadingException("Please check your input path and make sure " +
           "that files end with '.csv' and content is not empty.")
       }
     }

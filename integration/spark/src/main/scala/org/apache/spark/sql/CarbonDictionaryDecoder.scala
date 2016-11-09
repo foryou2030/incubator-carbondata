@@ -25,15 +25,15 @@ import org.apache.spark.sql.execution.{SparkPlan, UnaryNode}
 import org.apache.spark.sql.hive.{CarbonMetastoreCatalog, CarbonMetastoreTypes}
 import org.apache.spark.sql.optimizer.{CarbonAliasDecoderRelation, CarbonDecoderRelation}
 import org.apache.spark.sql.types._
-import org.apache.spark.unsafe.types.UTF8String
 
-import org.carbondata.core.cache.{Cache, CacheProvider, CacheType}
-import org.carbondata.core.cache.dictionary.{Dictionary, DictionaryColumnUniqueIdentifier}
-import org.carbondata.core.carbon.{AbsoluteTableIdentifier, CarbonTableIdentifier, ColumnIdentifier}
-import org.carbondata.core.carbon.metadata.datatype.DataType
-import org.carbondata.core.carbon.metadata.encoder.Encoding
-import org.carbondata.core.carbon.metadata.schema.table.column.CarbonDimension
-import org.carbondata.scan.util.DataTypeUtil
+import org.apache.carbondata.core.cache.{Cache, CacheProvider, CacheType}
+import org.apache.carbondata.core.cache.dictionary.{Dictionary, DictionaryColumnUniqueIdentifier}
+import org.apache.carbondata.core.carbon.{AbsoluteTableIdentifier, ColumnIdentifier}
+import org.apache.carbondata.core.carbon.metadata.datatype.DataType
+import org.apache.carbondata.core.carbon.metadata.encoder.Encoding
+import org.apache.carbondata.core.carbon.metadata.schema.table.column.CarbonDimension
+import org.apache.carbondata.core.carbon.querystatistics._
+import org.apache.carbondata.core.util.{CarbonTimeStatisticsFactory, DataTypeUtil}
 
 /**
  * It decodes the data.
@@ -81,9 +81,11 @@ case class CarbonDictionaryDecoder(
   def canBeDecoded(attr: Attribute): Boolean = {
     profile match {
       case ip: IncludeProfile if ip.attributes.nonEmpty =>
-        ip.attributes.exists(a => a.name.equals(attr.name))
+        ip.attributes
+          .exists(a => a.name.equalsIgnoreCase(attr.name))
       case ep: ExcludeProfile =>
-        !ep.attributes.exists(a => a.name.equals(attr.name))
+        !ep.attributes
+          .exists(a => a.name.equalsIgnoreCase(attr.name))
       case _ => true
     }
   }
@@ -100,10 +102,10 @@ case class CarbonDictionaryDecoder(
       case DataType.DECIMAL =>
         val scale: Int = carbonDimension.getColumnSchema.getScale
         val precision: Int = carbonDimension.getColumnSchema.getPrecision
-        if (scale > 0 && precision > 0)  {
-          DecimalType(scale, precision)
-        } else {
+        if (scale == 0 && precision == 0) {
           DecimalType(18, 2)
+        } else {
+          DecimalType(precision, scale)
         }
       case DataType.TIMESTAMP => TimestampType
       case DataType.STRUCT =>
@@ -120,14 +122,13 @@ case class CarbonDictionaryDecoder(
     val dictIds: Array[(String, ColumnIdentifier, DataType)] = attributes.map { a =>
       val attr = aliasMap.getOrElse(a, a)
       val relation = relations.find(p => p.contains(attr))
-      if(relation.isDefined) {
+      if(relation.isDefined && canBeDecoded(attr)) {
         val carbonTable = relation.get.carbonRelation.carbonRelation.metaData.carbonTable
         val carbonDimension =
           carbonTable.getDimensionByName(carbonTable.getFactTableName, attr.name)
         if (carbonDimension != null &&
             carbonDimension.hasEncoding(Encoding.DICTIONARY) &&
-            !carbonDimension.hasEncoding(Encoding.DIRECT_DICTIONARY) &&
-            canBeDecoded(attr)) {
+            !carbonDimension.hasEncoding(Encoding.DIRECT_DICTIONARY)) {
           (carbonTable.getFactTableName, carbonDimension.getColumnIdentifier,
               carbonDimension.getDataType)
         } else {
@@ -141,43 +142,62 @@ case class CarbonDictionaryDecoder(
     dictIds
   }
 
-
   override def outputsUnsafeRows: Boolean = true
+
+  override def canProcessUnsafeRows: Boolean = true
+
+  override def canProcessSafeRows: Boolean = true
+
+
 
   override def doExecute(): RDD[InternalRow] = {
     attachTree(this, "execute") {
       val storePath = sqlContext.catalog.asInstanceOf[CarbonMetastoreCatalog].storePath
+      val queryId = sqlContext.getConf("queryId", System.nanoTime() + "")
       val absoluteTableIdentifiers = relations.map { relation =>
         val carbonTable = relation.carbonRelation.carbonRelation.metaData.carbonTable
         (carbonTable.getFactTableName, carbonTable.getAbsoluteTableIdentifier)
       }.toMap
 
+      val recorder = CarbonTimeStatisticsFactory.createExecutorRecorder(queryId);
       if (isRequiredToDecode) {
         val dataTypes = child.output.map { attr => attr.dataType }
         child.execute().mapPartitions { iter =>
           val cacheProvider: CacheProvider = CacheProvider.getInstance
           val forwardDictionaryCache: Cache[DictionaryColumnUniqueIdentifier, Dictionary] =
-            cacheProvider
-              .createCache(CacheType.FORWARD_DICTIONARY, storePath)
+            cacheProvider.createCache(CacheType.FORWARD_DICTIONARY, storePath)
           val dicts: Seq[Dictionary] = getDictionary(absoluteTableIdentifiers,
             forwardDictionaryCache)
           val dictIndex = dicts.zipWithIndex.filter(x => x._1 != null).map(x => x._2)
           new Iterator[InternalRow] {
             val unsafeProjection = UnsafeProjection.create(output.map(_.dataType).toArray)
-            override final def hasNext: Boolean = iter.hasNext
-
+            var flag = true
+            var total = 0L
+            override final def hasNext: Boolean = {
+              flag = iter.hasNext
+              if (false == flag && total > 0) {
+                val queryStatistic = new QueryStatistic()
+                queryStatistic
+                  .addFixedTimeStatistic(QueryStatisticsConstants.PREPARE_RESULT, total)
+                recorder.recordStatistics(queryStatistic)
+                recorder.logStatistics()
+              }
+              flag
+            }
             override final def next(): InternalRow = {
+              val startTime = System.currentTimeMillis()
               val row: InternalRow = iter.next()
               val data = row.toSeq(dataTypes).toArray
               dictIndex.foreach { index =>
                 if (data(index) != null) {
-                  data(index) = DataTypeUtil
-                    .getDataBasedOnDataType(dicts(index)
+                  data(index) = DataTypeUtil.getDataBasedOnDataType(dicts(index)
                       .getDictionaryValueForKey(data(index).asInstanceOf[Int]),
                       getDictionaryColumnIds(index)._3)
                 }
               }
-              unsafeProjection(row)
+              val result = unsafeProjection(new GenericMutableRow(data))
+              total += System.currentTimeMillis() - startTime
+              result
             }
           }
         }
@@ -203,7 +223,7 @@ case class CarbonDictionaryDecoder(
             atiMap.get(f._1).get.getCarbonTableIdentifier,
             f._2, f._3))
         } catch {
-          case _ => null
+          case _: Throwable => null
         }
       } else {
         null

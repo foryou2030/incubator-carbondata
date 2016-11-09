@@ -22,7 +22,6 @@ import org.apache.spark.sql.catalyst.analysis.TypeCheckResult
 import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.catalyst.expressions.codegen.CodegenFallback
 import org.apache.spark.sql.catalyst.plans.logical.{UnaryNode, _}
-import org.apache.spark.sql.execution.command.tableModel
 import org.apache.spark.sql.hive.HiveContext
 import org.apache.spark.sql.optimizer.{CarbonAliasDecoderRelation, CarbonDecoderRelation}
 import org.apache.spark.sql.types._
@@ -49,98 +48,9 @@ object getDB {
 }
 
 /**
- * Shows schemas
+ * Shows Loads in a table
  */
-case class ShowSchemaCommand(cmd: Option[String]) extends LogicalPlan with Command {
-  override def children: Seq[LogicalPlan] = Seq.empty
-
-  override def output: Seq[Attribute] = {
-    Seq(AttributeReference("result", StringType, nullable = false)())
-  }
-}
-
-/**
- * Shows AggregateTables of a schema
- */
-case class ShowCreateCubeCommand(cm: tableModel) extends LogicalPlan with Command {
-  override def children: Seq[LogicalPlan] = Seq.empty
-
-  override def output: Seq[Attribute] = {
-    Seq(AttributeReference("createCubeCmd", StringType, nullable = false)())
-  }
-}
-
-/**
- * Shows AggregateTables of a schema
- */
-case class ShowAggregateTablesCommand(schemaNameOp: Option[String])
-  extends LogicalPlan with Command {
-  override def children: Seq[LogicalPlan] = Seq.empty
-
-  override def output: Seq[Attribute] = {
-    Seq(AttributeReference("tableName", StringType, nullable = false)())
-  }
-}
-
-/**
- * Shows cubes in schema
- */
-case class ShowCubeCommand(schemaNameOp: Option[String]) extends LogicalPlan with Command {
-  override def children: Seq[LogicalPlan] = Seq.empty
-
-  override def output: Seq[Attribute] = {
-    Seq(AttributeReference("tableName", StringType, nullable = false)(),
-      AttributeReference("isRegisteredWithSpark", BooleanType, nullable = false)())
-  }
-}
-
-
-/**
- * Shows cubes in schema
- */
-case class ShowAllCubeCommand() extends LogicalPlan with Command {
-  override def children: Seq[LogicalPlan] = Seq.empty
-
-  override def output: Seq[Attribute] = {
-    Seq(AttributeReference("dbName", StringType, nullable = false)(),
-      AttributeReference("tableName", StringType, nullable = false)(),
-      AttributeReference("isRegisteredWithSpark", BooleanType, nullable = false)())
-  }
-}
-
-case class SuggestAggregateCommand(
-    script: Option[String],
-    sugType: Option[String],
-    schemaName: Option[String],
-    cubeName: String) extends LogicalPlan with Command {
-  override def children: Seq[LogicalPlan] = Seq.empty
-
-  override def output: Seq[Attribute] = {
-    Seq(AttributeReference("SuggestionType", StringType, nullable = false)(),
-      AttributeReference("Suggestion", StringType, nullable = false)())
-  }
-}
-
-/**
- * Shows cubes in schema
- */
-case class ShowTablesDetailedCommand(schemaNameOp: Option[String])
-  extends LogicalPlan with Command {
-  override def children: Seq[LogicalPlan] = Seq.empty
-
-  override def output: Seq[Attribute] = {
-    Seq(AttributeReference("TABLE_CAT", StringType, nullable = true)(),
-      AttributeReference("TABLE_SCHEM", StringType, nullable = false)(),
-      AttributeReference("TABLE_NAME", StringType, nullable = false)(),
-      AttributeReference("TABLE_TYPE", StringType, nullable = false)(),
-      AttributeReference("REMARKS", StringType, nullable = false)())
-  }
-}
-
-/**
- * Shows Loads in a cube
- */
-case class ShowLoadsCommand(schemaNameOp: Option[String], cube: String, limit: Option[String])
+case class ShowLoadsCommand(databaseNameOp: Option[String], table: String, limit: Option[String])
   extends LogicalPlan with Command {
 
   override def children: Seq[LogicalPlan] = Seq.empty
@@ -160,11 +70,8 @@ case class DescribeFormattedCommand(sql: String, tblIdentifier: TableIdentifier)
   extends LogicalPlan with Command {
   override def children: Seq[LogicalPlan] = Seq.empty
 
-  override def output: Seq[AttributeReference] = {
-    Seq(AttributeReference("col_name", StringType, nullable = false)(),
-      AttributeReference("data_type", StringType, nullable = false)(),
-      AttributeReference("comment", StringType, nullable = false)())
-  }
+  override def output: Seq[AttributeReference] =
+    Seq(AttributeReference("result", StringType, nullable = false)())
 }
 
 case class CarbonDictionaryCatalystDecoder(
@@ -183,17 +90,3 @@ abstract class CarbonProfile(attributes: Seq[Attribute]) extends Serializable {
 case class IncludeProfile(attributes: Seq[Attribute]) extends CarbonProfile(attributes)
 
 case class ExcludeProfile(attributes: Seq[Attribute]) extends CarbonProfile(attributes)
-
-case class FakeCarbonCast(child: Literal, dataType: DataType)
-  extends LeafExpression with CodegenFallback {
-
-  override def toString: String = s"FakeCarbonCast($child as ${ dataType.simpleString })"
-
-  override def checkInputDataTypes(): TypeCheckResult = {
-    TypeCheckResult.TypeCheckSuccess
-  }
-
-  override def nullable: Boolean = child.nullable
-
-  override def eval(input: InternalRow): Any = child.value
-}

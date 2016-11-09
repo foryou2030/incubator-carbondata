@@ -17,24 +17,47 @@
 
 package org.apache.spark.sql
 
+import java.io.File
+
 import scala.language.implicitConversions
 
-import org.apache.spark.SparkContext
+import org.apache.spark.{Logging, SparkContext}
+import org.apache.spark.scheduler.cluster.CoarseGrainedSchedulerBackend
 import org.apache.spark.sql.catalyst.ParserDialect
 import org.apache.spark.sql.catalyst.analysis.{Analyzer, OverrideCatalog}
-import org.apache.spark.sql.catalyst.optimizer.{DefaultOptimizer, Optimizer}
+import org.apache.spark.sql.catalyst.optimizer.Optimizer
 import org.apache.spark.sql.catalyst.plans.logical.LogicalPlan
-import org.apache.spark.sql.execution.command.PartitionData
+import org.apache.spark.sql.execution.ExtractPythonUDFs
+import org.apache.spark.sql.execution.datasources.{PreInsertCastAndRename, PreWriteCheck}
 import org.apache.spark.sql.hive._
 import org.apache.spark.sql.optimizer.CarbonOptimizer
 
-import org.carbondata.common.logging.LogServiceFactory
-import org.carbondata.core.util.CarbonProperties
-import org.carbondata.spark.rdd.CarbonDataFrameRDD
+import org.apache.carbondata.common.logging.LogServiceFactory
+import org.apache.carbondata.core.carbon.querystatistics.{QueryStatistic, QueryStatisticsConstants}
+import org.apache.carbondata.core.constants.CarbonCommonConstants
+import org.apache.carbondata.core.util.{CarbonProperties, CarbonTimeStatisticsFactory}
+import org.apache.carbondata.spark.rdd.CarbonDataFrameRDD
 
-class CarbonContext(val sc: SparkContext, val storePath: String) extends HiveContext(sc) {
+class CarbonContext(
+    val sc: SparkContext,
+    val storePath: String,
+    metaStorePath: String) extends HiveContext(sc) with Logging {
   self =>
+
+  def this (sc: SparkContext) = {
+    this (sc,
+      new File(CarbonCommonConstants.STORE_LOCATION_DEFAULT_VAL).getCanonicalPath,
+      new File(CarbonCommonConstants.METASTORE_LOCATION_DEFAULT_VAL).getCanonicalPath)
+  }
+
+  def this (sc: SparkContext, storePath: String) = {
+    this (sc,
+      storePath,
+      new File(CarbonCommonConstants.METASTORE_LOCATION_DEFAULT_VAL).getCanonicalPath)
+  }
+
   CarbonContext.addInstance(sc, this)
+  CodeGenerateFactory.init(sc.version)
 
   var lastSchemaUpdatedTime = System.currentTimeMillis()
 
@@ -42,16 +65,35 @@ class CarbonContext(val sc: SparkContext, val storePath: String) extends HiveCon
 
   @transient
   override lazy val catalog = {
-    CarbonProperties.getInstance().addProperty("carbon.storelocation", storePath)
-    new CarbonMetastoreCatalog(this, storePath, metadataHive) with OverrideCatalog
+    CarbonProperties.getInstance()
+      .addProperty(CarbonCommonConstants.STORE_LOCATION, storePath)
+    new CarbonMetastoreCatalog(this, storePath, metadataHive, queryId) with OverrideCatalog
   }
 
   @transient
-  override protected[sql] lazy val analyzer = new Analyzer(catalog, functionRegistry, conf)
+  override protected[sql] lazy val analyzer =
+    new Analyzer(catalog, functionRegistry, conf) {
+
+      override val extendedResolutionRules =
+        catalog.ParquetConversions ::
+        catalog.CreateTables ::
+        catalog.PreInsertionCasts ::
+        ExtractPythonUDFs ::
+        ResolveHiveWindowFunction ::
+        PreInsertCastAndRename ::
+        Nil
+
+      override val extendedCheckRules = Seq(
+        PreWriteCheck(catalog)
+      )
+    }
 
   @transient
   override protected[sql] lazy val optimizer: Optimizer =
-    new CarbonOptimizer(DefaultOptimizer, conf)
+    CarbonOptimizer.optimizer(
+      CodeGenerateFactory.createDefaultOptimizer(conf, sc),
+      conf.asInstanceOf[CarbonSQLConf],
+      sc.version)
 
   protected[sql] override def getSQLDialect(): ParserDialect = new CarbonSQLDialect(this)
 
@@ -60,18 +102,38 @@ class CarbonContext(val sc: SparkContext, val storePath: String) extends HiveCon
     Seq(carbonStrategy.CarbonTableScan, carbonStrategy.DDLStrategies)
   }
 
+  override protected def configure(): Map[String, String] = {
+    sc.hadoopConfiguration.addResource("hive-site.xml")
+    if (sc.hadoopConfiguration.get(CarbonCommonConstants.HIVE_CONNECTION_URL) == null) {
+      val metaStorePathAbsolute = new File(metaStorePath).getCanonicalPath
+      val hiveMetaStoreDB = metaStorePathAbsolute + "/metastore_db"
+      logDebug(s"metastore db is going to be created in location : $hiveMetaStoreDB")
+      super.configure() ++ Map((CarbonCommonConstants.HIVE_CONNECTION_URL,
+              s"jdbc:derby:;databaseName=$hiveMetaStoreDB;create=true"),
+        ("hive.metastore.warehouse.dir", metaStorePathAbsolute + "/hivemetadata"))
+    } else {
+      super.configure()
+    }
+  }
+
   @transient
   val LOGGER = LogServiceFactory.getLogService(CarbonContext.getClass.getName)
 
-  override def sql(sql: String): SchemaRDD = {
+  var queryId: String = ""
+
+  override def sql(sql: String): DataFrame = {
     // queryId will be unique for each query, creting query detail holder
-    val queryId: String = System.nanoTime() + ""
+    queryId = System.nanoTime() + ""
     this.setConf("queryId", queryId)
 
     CarbonContext.updateCarbonPorpertiesPath(this)
     val sqlString = sql.toUpperCase
     LOGGER.info(s"Query [$sqlString]")
+    val recorder = CarbonTimeStatisticsFactory.createDriverRecorder()
+    val statistic = new QueryStatistic()
     val logicPlan: LogicalPlan = parseSql(sql)
+    statistic.addStatistics(QueryStatisticsConstants.SQL_PARSE, System.currentTimeMillis())
+    recorder.recordStatisticsForDriver(statistic, queryId)
     val result = new CarbonDataFrameRDD(this, logicPlan)
 
     // We force query optimization to happen right away instead of letting it happen lazily like
@@ -83,45 +145,13 @@ class CarbonContext(val sc: SparkContext, val storePath: String) extends HiveCon
 }
 
 object CarbonContext {
-  /**
-   * @param schemaName - Schema Name
-   * @param cubeName   - Cube Name
-   * @param factPath   - Raw CSV data path
-   * @param targetPath - Target path where the file will be split as per partition
-   * @param delimiter  - default file delimiter is comma(,)
-   * @param quoteChar  - default quote character used in Raw CSV file, Default quote
-   *                   character is double quote(")
-   * @param fileHeader - Header should be passed if not available in Raw CSV File, else pass null,
-   *                   Header will be read from CSV
-   * @param escapeChar - This parameter by default will be null, there wont be any validation if
-   *                   default escape character(\) is found on the RawCSV file
-   * @param multiLine  - This parameter will be check for end of quote character if escape character
-   *                   & quote character is set.
-   *                   if set as false, it will check for end of quote character within the line
-   *                   and skips only 1 line if end of quote not found
-   *                   if set as true, By default it will check for 10000 characters in multiple
-   *                   lines for end of quote & skip all lines if end of quote not found.
-   */
-  final def partitionData(
-      schemaName: String = null,
-      cubeName: String,
-      factPath: String,
-      targetPath: String,
-      delimiter: String = ",",
-      quoteChar: String = "\"",
-      fileHeader: String = null,
-      escapeChar: String = null,
-      multiLine: Boolean = false)(hiveContext: HiveContext): String = {
-    updateCarbonPorpertiesPath(hiveContext)
-    var schemaNameLocal = schemaName
-    if (schemaNameLocal == null) {
-      schemaNameLocal = "default"
-    }
-    val partitionDataClass = PartitionData(schemaName, cubeName, factPath, targetPath, delimiter,
-      quoteChar, fileHeader, escapeChar, multiLine)
-    partitionDataClass.run(hiveContext)
-    partitionDataClass.partitionStatus
-  }
+
+  val datasourceName: String = "org.apache.carbondata.format"
+
+  val datasourceShortName: String = "carbondata"
+
+  @transient
+  val LOGGER = LogServiceFactory.getLogService(CarbonContext.getClass.getName)
 
   final def updateCarbonPorpertiesPath(hiveContext: HiveContext) {
     val carbonPropertiesFilePath = hiveContext.getConf("carbon.properties.filepath", null)
@@ -153,5 +183,29 @@ object CarbonContext {
     cache(sc) = cc
   }
 
-  def datasourceName: String = "org.apache.carbondata.format"
+  /**
+   *
+   * Requesting the extra executors other than the existing ones.
+ *
+   * @param sc
+   * @param numExecutors
+   * @return
+   */
+  final def ensureExecutors(sc: SparkContext, numExecutors: Int): Boolean = {
+    sc.schedulerBackend match {
+      case b: CoarseGrainedSchedulerBackend =>
+        val requiredExecutors = numExecutors -  b.numExistingExecutors
+        LOGGER
+          .info("number of executors is =" + numExecutors + " existing executors are =" + b
+            .numExistingExecutors
+          )
+        if(requiredExecutors > 0) {
+          b.requestExecutors(requiredExecutors)
+        }
+        true
+      case _ =>
+        false
+    }
+
+  }
 }

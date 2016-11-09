@@ -1,20 +1,38 @@
-package org.carbondata.integration.spark.testsuite.validation;
+/*
+ * Licensed to the Apache Software Foundation (ASF) under one
+ * or more contributor license agreements.  See the NOTICE file
+ * distributed with this work for additional information
+ * regarding copyright ownership.  The ASF licenses this file
+ * to you under the Apache License, Version 2.0 (the
+ * "License"); you may not use this file except in compliance
+ * with the License.  You may obtain a copy of the License at
+ *
+ *    http://www.apache.org/licenses/LICENSE-2.0
+ *
+ * Unless required by applicable law or agreed to in writing,
+ * software distributed under the License is distributed on an
+ * "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY
+ * KIND, either express or implied.  See the License for the
+ * specific language governing permissions and limitations
+ * under the License.
+ */
+package org.apache.carbondata.integration.spark.testsuite.validation;
 
 import org.apache.spark.sql.common.util.CarbonHiveContext;
-import org.carbondata.core.carbon.CarbonTableIdentifier;
-import org.carbondata.core.carbon.path.CarbonStorePath;
-import org.carbondata.core.constants.CarbonCommonConstants;
-import org.carbondata.core.datastorage.store.FileHolder;
-import org.carbondata.core.datastorage.store.filesystem.CarbonFile;
-import org.carbondata.core.datastorage.store.filesystem.CarbonFileFilter;
-import org.carbondata.core.datastorage.store.impl.FileFactory;
-import org.carbondata.core.reader.CarbonFooterReader;
-import org.carbondata.core.util.CarbonProperties;
-import org.carbondata.format.BlockletIndex;
-import org.carbondata.format.BlockletInfo;
-import org.carbondata.format.DataChunk;
-import org.carbondata.format.Encoding;
-import org.carbondata.format.FileFooter;
+import org.apache.carbondata.core.carbon.CarbonTableIdentifier;
+import org.apache.carbondata.core.carbon.path.CarbonStorePath;
+import org.apache.carbondata.core.constants.CarbonCommonConstants;
+import org.apache.carbondata.core.datastorage.store.FileHolder;
+import org.apache.carbondata.core.datastorage.store.filesystem.CarbonFile;
+import org.apache.carbondata.core.datastorage.store.filesystem.CarbonFileFilter;
+import org.apache.carbondata.core.datastorage.store.impl.FileFactory;
+import org.apache.carbondata.core.reader.CarbonFooterReader;
+import org.apache.carbondata.core.util.CarbonProperties;
+import org.apache.carbondata.format.BlockletIndex;
+import org.apache.carbondata.format.BlockletInfo;
+import org.apache.carbondata.format.DataChunk;
+import org.apache.carbondata.format.Encoding;
+import org.apache.carbondata.format.FileFooter;
 import org.junit.AfterClass;
 import org.junit.Before;
 import org.junit.Test;
@@ -44,7 +62,8 @@ public class FileFooterValidator {
                 + "PARTITIONDATA(DELIMITER ',', QUOTECHAR '\"')");
     String storePath =
         CarbonProperties.getInstance().getProperty(CarbonCommonConstants.STORE_LOCATION);
-    CarbonTableIdentifier tableIdentifier = new CarbonTableIdentifier("default", "validatefooter", "1");
+    CarbonTableIdentifier tableIdentifier =
+            new CarbonTableIdentifier(CarbonCommonConstants.DATABASE_DEFAULT_NAME, "validatefooter", "1");
     String segmentPath = CarbonStorePath.getCarbonTablePath(storePath, tableIdentifier)
         .getCarbonDataDirectoryPath("0", "0");
     CarbonFile carbonFile =

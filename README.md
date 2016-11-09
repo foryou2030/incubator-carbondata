@@ -17,9 +17,10 @@
     under the License.
 -->
 
-# Apache CarbonData
-CarbonData is a new Apache Hadoop native file format for faster 
-interactive query using advanced columnar storage, index, compression 
+<img src="/docs/images/format/CarbonData_logo.png" width="200" height="40">
+
+Apache CarbonData is a new big data file format for faster
+interactive query using advanced columnar storage, index, compression
 and encoding techniques to improve computing efficiency, in turn it will 
 help speedup queries an order of magnitude faster over PetaBytes of data. 
 
@@ -30,34 +31,42 @@ CarbonData file format is a columnar store in HDFS, it has many features that a 
 * Column group: Allow multiple columns to form a column group that would be stored as row format. This reduces the row reconstruction cost at query time.
 * Supports for various use cases with one single Data format : like interactive OLAP-style query, Sequential Access (big scan), Random Access (narrow scan). 
 
-### Building CarbonData and using Development tools
-Please refer [Bulding CarbonData and configuring IDE](docs/Installing-CarbonData-And-IDE-Configuartion.md)
+### Documentation
+Please visit [CarbonData cwiki](https://cwiki.apache.org/confluence/display/CARBONDATA)
+
+### Building CarbonData,using development tools and cluster deployment guide
+Please refer [Building CarbonData and Configuring IDE](https://cwiki.apache.org/confluence/display/CARBONDATA/Building+CarbonData+And+IDE+Configuration)
+
+Please refer [Cluster Deployment Guide](https://cwiki.apache.org/confluence/display/CARBONDATA/Cluster+deployment+guide)
 
 ### Getting Started
-Read the [quick start](docs/Quick-Start.md)
+Read the [quick start](https://cwiki.apache.org/confluence/display/CARBONDATA/Quick+Start)
 
 ### Usage of CarbonData
- [DDL Operations on CarbonData](docs/DDL-Operations-on-Carbon.md) 
+ [DDL Operations on CarbonData](https://cwiki.apache.org/confluence/display/CARBONDATA/DDL+operations+on+CarbonData) 
  
- [DML Operations on CarbonData](docs/DML-Operations-on-Carbon.md)  
+ [DML Operations on CarbonData](https://cwiki.apache.org/confluence/display/CARBONDATA/DML+operations+on+CarbonData)  
  
- [CarbonData data management](docs/Carbondata-Management.md)  
+ [CarbonData data management](https://cwiki.apache.org/confluence/display/CARBONDATA/Data+Management)  
 
 ### CarbonData File Structure and interfaces
-Please refer [CarbonData File Format](docs/Carbondata-File-Structure-and-Format.md) and [CarbonData Interfaces](docs/Carbon-Interfaces.md)
+Please refer [CarbonData File Format](https://cwiki.apache.org/confluence/display/CARBONDATA/CarbonData+File+Structure+and+Format) and [CarbonData Interfaces](https://cwiki.apache.org/confluence/display/CARBONDATA/Carbon+Packaging+and+Interfaces)
+
+### CarbonData FAQ 
+[Configurations For Optimizing CarbonData Performance](https://cwiki.apache.org/confluence/display/CARBONDATA/Configurations+For+Optimizing+CarbonData+Performance)
 
 ### Other Technical Material
 [Apache CarbonData meetup material](docs/Apache-CarbonData-meetup-material.pdf)
 
 ### Fork and Contribute
 This is an active open source project for everyone, and we are always open to people who want to use this system or contribute to it. 
-This guide document introduce [how to contribute to CarbonData](docs/How-to-contribute-to-Apache-CarbonData.md).
+This guide document introduce [how to contribute to CarbonData](https://cwiki.apache.org/confluence/display/CARBONDATA/Contributing+to+CarbonData).
 
 ### Contact us
 To get involved in CarbonData:
 
-* [Subscribe:dev@carbondata.incubator.apache.org](mailto:dev-subscribe@carbondata.incubator.apache.org) then [mail](mailto:dev@carbondata.incubator.apache.org) to us
-* Report issues on [Jira](https://issues.apache.org/jira/browse/CARBONDATA).
+* First join by emailing to [dev-subscribe@carbondata.incubator.apache.org](mailto:dev-subscribe@carbondata.incubator.apache.org),then you can discuss issues by emailing to [dev@carbondata.incubator.apache.org](mailto:dev@carbondata.incubator.apache.org) or visit http://apache-carbondata-mailing-list-archive.1130556.n5.nabble.com
+* Report issues on [Apache Jira](https://issues.apache.org/jira/browse/CARBONDATA).
 
 ## About
 Apache CarbonData is an open source project of The Apache Software Foundation (ASF).
