@@ -18,24 +18,35 @@
  */
 package org.apache.carbondata.core.dictionary.server;
 
+import java.net.InetSocketAddress;
+import java.util.concurrent.ExecutorService;
+import java.util.concurrent.Executors;
+
 import org.jboss.netty.bootstrap.ServerBootstrap;
 import org.jboss.netty.channel.ChannelPipeline;
 import org.jboss.netty.channel.ChannelPipelineFactory;
 import org.jboss.netty.channel.Channels;
 import org.jboss.netty.channel.socket.nio.NioServerSocketChannelFactory;
+import org.jboss.netty.handler.codec.serialization.ClassResolvers;
 import org.jboss.netty.handler.codec.serialization.ObjectDecoder;
 import org.jboss.netty.handler.codec.serialization.ObjectEncoder;
 
-import java.net.InetSocketAddress;
-import java.util.concurrent.ExecutorService;
-import java.util.concurrent.Executors;
 
 /**
  * Dictionary Server to generate dictionary keys.
  */
 public class DictionaryServer {
+
+  private ServerBootstrap bootstrap;
+
+  /**
+   * start dictionary server
+   *
+   * @param port
+   * @throws Exception
+   */
   public void startServer(int port) throws Exception {
-    ServerBootstrap bootstrap = new ServerBootstrap();
+    bootstrap = new ServerBootstrap();
 
     ExecutorService boss = Executors.newCachedThreadPool();
     ExecutorService worker = Executors.newCachedThreadPool();
@@ -46,7 +57,8 @@ public class DictionaryServer {
       @Override
       public ChannelPipeline getPipeline() throws Exception {
         ChannelPipeline pipeline = Channels.pipeline();
-        pipeline.addLast("ObjectDecoder", new ObjectDecoder());
+        pipeline.addLast("ObjectDecoder", new ObjectDecoder(ClassResolvers.cacheDisabled(
+            getClass().getClassLoader())));
         pipeline.addLast("ObjectEncoder", new ObjectEncoder());
         pipeline.addLast("DictionaryServerHandler", new DictionaryServerHandler());
         return pipeline;
@@ -54,5 +66,15 @@ public class DictionaryServer {
     });
     bootstrap.bind(new InetSocketAddress(port));
     System.out.println("Server Start!");
+  }
+
+  /**
+   * shutdown dictionary server
+   *
+   * @throws Exception
+   */
+  public void shutdown() throws Exception {
+    bootstrap.releaseExternalResources();
+    bootstrap.shutdown();
   }
 }

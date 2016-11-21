@@ -22,6 +22,7 @@ package org.apache.carbondata.processing.newflow.converter.impl;
 import java.util.List;
 
 import org.apache.carbondata.core.carbon.metadata.schema.table.column.CarbonColumn;
+import org.apache.carbondata.core.dictionary.generator.key.DictionaryKey;
 import org.apache.carbondata.core.keygenerator.directdictionary.DirectDictionaryGenerator;
 import org.apache.carbondata.core.keygenerator.directdictionary.DirectDictionaryKeyGeneratorFactory;
 import org.apache.carbondata.processing.newflow.DataField;
@@ -81,4 +82,8 @@ public class DirectDictionaryFieldConverterImpl extends AbstractDictionaryFieldC
     cardinality.add(Integer.MAX_VALUE);
   }
 
+  @Override
+  public DictionaryKey getDictionaryKey() {
+    return null;
+  }
 }

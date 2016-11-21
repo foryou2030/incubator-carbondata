@@ -45,22 +45,22 @@ object CarbonExample {
     // in each node to do data loading, another uses a multi-thread framework without Kettle (See
     // AbstractDataLoadProcessorStep)
     // Load data with Kettle
-//    cc.sql(s"""
-//           LOAD DATA LOCAL INPATH '$testData' into table t3
-//           """)
-//
-//    // Perform a query
-//    cc.sql("""
-//           SELECT country, count(salary) AS amount
-//           FROM t3
-//           WHERE country IN ('china','france')
-//           GROUP BY country
-//           """).show()
+    cc.sql(s"""
+           LOAD DATA LOCAL INPATH '$testData' into table t3
+           """)
+
+    // Perform a query
+    cc.sql("""
+           SELECT country, count(salary) AS amount
+           FROM t3
+           WHERE country IN ('china','france')
+           GROUP BY country
+           """).show()
 
     // Load data without kettle
     cc.sql(s"""
            LOAD DATA LOCAL INPATH '$testData' into table t3
-           OPTIONS('USE_KETTLE'='false', 'USEONEPASS'='true')
+           OPTIONS('USE_KETTLE'='false')
            """)
 
     // Perform a query

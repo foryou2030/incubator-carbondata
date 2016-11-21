@@ -640,11 +640,6 @@ public final class CarbonCommonConstants {
   public static final int INVALID_SURROGATE_KEY = -1;
 
   /**
-   * if getSurrogateKey not found, return 0
-   */
-  public static final int NOT_FOUND_SURROGATE_KEY = 0;
-
-  /**
    * surrogate key for MEMBER_DEFAULT_VAL
    */
   public static final int MEMBER_DEFAULT_VAL_SURROGATE_KEY = 1;
@@ -907,7 +902,7 @@ public final class CarbonCommonConstants {
   /**
    * Default carbon dictionary server port
    */
-  public static final String DICTIONARY_SERVER_PORT_DEFAULT = "1116";
+  public static final String DICTIONARY_SERVER_PORT_DEFAULT = "2030";
 
   private CarbonCommonConstants() {
   }

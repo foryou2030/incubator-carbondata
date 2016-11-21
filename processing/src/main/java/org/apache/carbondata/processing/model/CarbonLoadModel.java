@@ -372,7 +372,7 @@ public class CarbonLoadModel implements Serializable {
     copy.maxColumns = maxColumns;
     copy.storePath = storePath;
     copy.useOnePass = useOnePass;
-	copy.dictionaryServerHost = dictionaryServerHost;
+    copy.dictionaryServerHost = dictionaryServerHost;
     copy.dictionaryServerPort = dictionaryServerPort;
     return copy;
   }

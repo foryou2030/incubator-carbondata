@@ -37,7 +37,6 @@ import org.apache.carbondata.processing.newflow.constants.DataLoadProcessorConst
 import org.apache.carbondata.processing.newflow.converter.BadRecordLogHolder;
 import org.apache.carbondata.processing.newflow.converter.FieldConverter;
 import org.apache.carbondata.processing.newflow.converter.RowConverter;
-import org.apache.carbondata.processing.newflow.dictionary.DictionaryServerClientDictionary;
 import org.apache.carbondata.processing.newflow.exception.CarbonDataLoadingException;
 import org.apache.carbondata.processing.newflow.row.CarbonRow;
 import org.apache.carbondata.processing.surrogatekeysgenerator.csvbased.BadRecordsLogger;
@@ -59,6 +58,8 @@ public class RowConverterImpl implements RowConverter {
   private BadRecordLogHolder logHolder;
 
   private DictionaryClient dictClient;
+
+  private ExecutorService executorService;
 
   public RowConverterImpl(DataField[] fields, CarbonDataLoadConfiguration configuration,
       BadRecordsLogger badRecordLogger) {
@@ -82,7 +83,7 @@ public class RowConverterImpl implements RowConverter {
 
     // for one pass load, start the dictionary client
     if (configuration.getUseOnePass()) {
-      ExecutorService executorService = Executors.newFixedThreadPool(1);
+      executorService = Executors.newFixedThreadPool(1);
       Future<DictionaryClient> result = executorService.submit(new Callable<DictionaryClient>() {
         @Override
         public DictionaryClient call() throws Exception {
@@ -146,9 +147,10 @@ public class RowConverterImpl implements RowConverter {
 
         // for one pass load, finally write dictionary to file
         if (configuration.getUseOnePass()) {
-          if (fieldConverters[i] instanceof DictionaryFieldConverterImpl){
+          if (fieldConverters[i] instanceof DictionaryFieldConverterImpl ||
+                  fieldConverters[i] instanceof ComplexFieldConverterImpl) {
             DictionaryKey dictionaryKey =
-                    ((DictionaryFieldConverterImpl) fieldConverters[i]).getDictionaryKey();
+                    ((AbstractDictionaryFieldConverterImpl) fieldConverters[i]).getDictionaryKey();
             dictionaryKey.setMessage(MESSAGETYPE.WRITE_DICTIONARY);
             dictClient.getDictionary(dictionaryKey);
           }
@@ -161,6 +163,12 @@ public class RowConverterImpl implements RowConverter {
     }
     // Set the cardinality to configuration, it will be used by further step for mdk key.
     configuration.setDataLoadProperty(DataLoadProcessorConstants.DIMENSION_LENGTHS, cardinality);
+
+    // close dictionary client when finish write
+    if (configuration.getUseOnePass()) {
+      dictClient.shutDown();
+      executorService.shutdownNow();
+    }
   }
 
   @Override

@@ -140,7 +140,7 @@ class AutoHighCardinalityIdentifyTestCase extends QueryTest with BeforeAndAfterA
     assert(!newHc1.hasEncoding(Encoding.DICTIONARY))
     assert(newC2.hasEncoding(Encoding.DICTIONARY))
   }
-
+/*
   test("auto identify high cardinality column in first load #396") {
     val oldTable = relation("highcard").tableMeta.carbonTable
     sql(s"LOAD DATA LOCAL INPATH '$filePath' into table highcard")
@@ -175,6 +175,6 @@ class AutoHighCardinalityIdentifyTestCase extends QueryTest with BeforeAndAfterA
     val c2 = newTable.getDimensionByName("colgrp_highcard", "c2")
     assert(hc1.hasEncoding(Encoding.DICTIONARY))
     assert(c2.hasEncoding(Encoding.DICTIONARY))
-
   }
+  */
 }

@@ -43,7 +43,6 @@ public class DictionaryClientHandler extends SimpleChannelHandler {
   @Override
   public void messageReceived(ChannelHandlerContext ctx, MessageEvent e) throws Exception {
     DictionaryKey key = (DictionaryKey) e.getMessage();
-    System.out.println(key.getData());
     dictKeyQueue.offer(key);
     super.messageReceived(ctx, e);
   }
@@ -54,18 +53,12 @@ public class DictionaryClientHandler extends SimpleChannelHandler {
     ctx.getChannel().close();
   }
 
-  @Override
-  public void channelDisconnected(ChannelHandlerContext ctx, ChannelStateEvent e) throws Exception {
-    System.out.println("channelDisconnected");
-    super.channelDisconnected(ctx, e);
-  }
-
-  @Override
-  public void channelClosed(ChannelHandlerContext ctx, ChannelStateEvent e) throws Exception {
-    System.out.println("channelClosed");
-    super.channelClosed(ctx, e);
-  }
-
+  /**
+   * client send request to server
+   *
+   * @param key
+   * @return
+   */
   public DictionaryKey getDictionary(DictionaryKey key) {
     DictionaryKey dictionaryKey;
     try {

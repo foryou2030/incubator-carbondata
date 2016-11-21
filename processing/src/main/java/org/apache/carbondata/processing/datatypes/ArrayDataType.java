@@ -27,6 +27,7 @@ import java.util.List;
 
 import org.apache.carbondata.core.constants.CarbonCommonConstants;
 import org.apache.carbondata.core.devapi.DictionaryGenerationException;
+import org.apache.carbondata.core.dictionary.generator.key.DictionaryKey;
 import org.apache.carbondata.core.keygenerator.KeyGenException;
 import org.apache.carbondata.core.keygenerator.KeyGenerator;
 import org.apache.carbondata.processing.newflow.complexobjects.ArrayObject;
@@ -309,4 +310,8 @@ public class ArrayDataType implements GenericDataType<ArrayObject> {
     children.fillCardinalityAfterDataLoad(dimCardWithComplex, maxSurrogateKeyArray);
   }
 
+  @Override
+  public DictionaryKey getDictionaryKey() {
+    return children.getDictionaryKey();
+  }
 }

@@ -23,22 +23,30 @@ import java.io.DataOutputStream;
 import java.io.IOException;
 import java.nio.ByteBuffer;
 import java.util.ArrayList;
+import java.util.HashMap;
 import java.util.List;
+import java.util.Map;
 
 import org.apache.carbondata.core.cache.Cache;
+import org.apache.carbondata.core.cache.dictionary.ColumnDictionaryInfo;
 import org.apache.carbondata.core.cache.dictionary.Dictionary;
 import org.apache.carbondata.core.cache.dictionary.DictionaryColumnUniqueIdentifier;
+import org.apache.carbondata.core.cache.dictionary.ForwardDictionary;
 import org.apache.carbondata.core.carbon.CarbonTableIdentifier;
 import org.apache.carbondata.core.carbon.metadata.encoder.Encoding;
 import org.apache.carbondata.core.carbon.metadata.schema.table.column.CarbonDimension;
 import org.apache.carbondata.core.constants.CarbonCommonConstants;
 import org.apache.carbondata.core.devapi.BiDictionary;
 import org.apache.carbondata.core.devapi.DictionaryGenerationException;
+import org.apache.carbondata.core.dictionary.client.DictionaryClient;
+import org.apache.carbondata.core.dictionary.generator.key.DictionaryKey;
+import org.apache.carbondata.core.dictionary.generator.key.MESSAGETYPE;
 import org.apache.carbondata.core.keygenerator.KeyGenException;
 import org.apache.carbondata.core.keygenerator.KeyGenerator;
 import org.apache.carbondata.core.keygenerator.directdictionary.DirectDictionaryKeyGeneratorFactory;
 import org.apache.carbondata.core.util.CarbonUtilException;
 import org.apache.carbondata.core.util.DataTypeUtil;
+import org.apache.carbondata.processing.newflow.dictionary.DictionaryServerClientDictionary;
 import org.apache.carbondata.processing.newflow.dictionary.DirectDictionary;
 import org.apache.carbondata.processing.newflow.dictionary.PreCreatedDictionary;
 import org.apache.carbondata.processing.surrogatekeysgenerator.csvbased.CarbonCSVBasedDimSurrogateKeyGen;
@@ -94,6 +102,8 @@ public class PrimitiveDataType implements GenericDataType<Object> {
 
   private CarbonDimension carbonDimension;
 
+  private DictionaryKey dictionaryKey;
+
   /**
    * constructor
    *
@@ -116,8 +126,10 @@ public class PrimitiveDataType implements GenericDataType<Object> {
    * @param columnId
    */
   public PrimitiveDataType(String name, String parentname, String columnId,
-      CarbonDimension carbonDimension, Cache<DictionaryColumnUniqueIdentifier, Dictionary> cache,
-      CarbonTableIdentifier carbonTableIdentifier) {
+                           CarbonDimension carbonDimension,
+                           Cache<DictionaryColumnUniqueIdentifier, Dictionary> cache,
+                           CarbonTableIdentifier carbonTableIdentifier,
+                           DictionaryClient client, String storePath, Boolean useOnePass) {
     this.name = name;
     this.parentname = parentname;
     this.columnId = columnId;
@@ -130,8 +142,29 @@ public class PrimitiveDataType implements GenericDataType<Object> {
         dictionaryGenerator = new DirectDictionary(DirectDictionaryKeyGeneratorFactory
             .getDirectDictionaryGenerator(carbonDimension.getDataType()));
       } else {
-        Dictionary dictionary = cache.get(identifier);
-        dictionaryGenerator = new PreCreatedDictionary(dictionary);
+        Dictionary dictionary = null;
+        if (useOnePass) {
+          try{
+            dictionary = cache.get(identifier);
+          } catch (CarbonUtilException e) {
+            // TODO: need to initialize dictionary
+            dictionary = new ForwardDictionary(
+                    new ColumnDictionaryInfo(carbonDimension.getDataType()));
+          }
+          dictionaryKey = new DictionaryKey(carbonTableIdentifier.getTableUniqueName(),
+                  carbonDimension.getColName(), null, null);
+          // for table initialization
+          dictionaryKey.setMessage(MESSAGETYPE.TABLE_INITIALIZATION);
+          client.getDictionary(dictionaryKey);
+          Map<Object, Integer> localCache = new HashMap<>();
+          // for generate dictionary
+          dictionaryKey.setMessage(MESSAGETYPE.DICTIONARY_GENERATION);
+          dictionaryGenerator = new DictionaryServerClientDictionary(dictionary, client,
+                  dictionaryKey, localCache);
+        } else {
+          dictionary = cache.get(identifier);
+          dictionaryGenerator = new PreCreatedDictionary(dictionary);
+        }
       }
     } catch (CarbonUtilException e) {
       throw new RuntimeException(e);
@@ -331,5 +364,10 @@ public class PrimitiveDataType implements GenericDataType<Object> {
   public void fillCardinalityAfterDataLoad(List<Integer> dimCardWithComplex,
       int[] maxSurrogateKeyArray) {
     dimCardWithComplex.add(maxSurrogateKeyArray[index]);
+  }
+
+  @Override
+  public DictionaryKey getDictionaryKey() {
+    return this.dictionaryKey;
   }
 }

@@ -74,7 +74,8 @@ public class FieldEncoderFactory {
             index, client, storePath, useOnePass);
       } else if (dataField.getColumn().isComplex()) {
         return new ComplexFieldConverterImpl(
-            createComplexType(dataField, cache, carbonTableIdentifier), index);
+            createComplexType(dataField, cache, carbonTableIdentifier,
+                    client, storePath, useOnePass), index);
       } else {
         return new NonDictionaryFieldConverterImpl(dataField, nullFormat, index);
       }
@@ -88,9 +89,10 @@ public class FieldEncoderFactory {
    */
   private static GenericDataType createComplexType(DataField dataField,
       Cache<DictionaryColumnUniqueIdentifier, Dictionary> cache,
-      CarbonTableIdentifier carbonTableIdentifier) {
+      CarbonTableIdentifier carbonTableIdentifier,
+      DictionaryClient client, String storePath, Boolean useOnePass) {
     return createComplexType(dataField.getColumn(), dataField.getColumn().getColName(), cache,
-        carbonTableIdentifier);
+        carbonTableIdentifier, client, storePath, useOnePass);
   }
 
   /**
@@ -100,7 +102,8 @@ public class FieldEncoderFactory {
    */
   private static GenericDataType createComplexType(CarbonColumn carbonColumn, String parentName,
       Cache<DictionaryColumnUniqueIdentifier, Dictionary> cache,
-      CarbonTableIdentifier carbonTableIdentifier) {
+      CarbonTableIdentifier carbonTableIdentifier,
+      DictionaryClient client, String storePath, Boolean useOnePass) {
     switch (carbonColumn.getDataType()) {
       case ARRAY:
         List<CarbonDimension> listOfChildDimensions =
@@ -110,7 +113,7 @@ public class FieldEncoderFactory {
             new ArrayDataType(carbonColumn.getColName(), parentName, carbonColumn.getColumnId());
         for (CarbonDimension dimension : listOfChildDimensions) {
           arrayDataType.addChildren(createComplexType(dimension, carbonColumn.getColName(), cache,
-              carbonTableIdentifier));
+              carbonTableIdentifier, client, storePath, useOnePass));
         }
         return arrayDataType;
       case STRUCT:
@@ -121,7 +124,7 @@ public class FieldEncoderFactory {
             new StructDataType(carbonColumn.getColName(), parentName, carbonColumn.getColumnId());
         for (CarbonDimension dimension : dimensions) {
           structDataType.addChildren(createComplexType(dimension, carbonColumn.getColName(), cache,
-              carbonTableIdentifier));
+              carbonTableIdentifier, client, storePath, useOnePass));
         }
         return structDataType;
       case MAP:
@@ -129,7 +132,7 @@ public class FieldEncoderFactory {
       default:
         return new PrimitiveDataType(carbonColumn.getColName(), parentName,
             carbonColumn.getColumnId(), (CarbonDimension) carbonColumn, cache,
-            carbonTableIdentifier);
+            carbonTableIdentifier, client, storePath, useOnePass);
     }
   }
 }

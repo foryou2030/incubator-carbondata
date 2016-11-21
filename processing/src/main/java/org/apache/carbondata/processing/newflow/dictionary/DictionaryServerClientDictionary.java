@@ -52,20 +52,26 @@ public class DictionaryServerClientDictionary implements BiDictionary<Integer, O
   @Override public Integer getOrGenerateKey(Object value) throws DictionaryGenerationException {
     Integer key = getKey(value);
     if (key == null) {
-        dictionaryKey.setData(value);
+      dictionaryKey.setData(value);
       DictionaryKey dictionaryValue = client.getDictionary(dictionaryKey);
       key = (Integer) dictionaryValue.getData();
       synchronized (localCache) {
         localCache.put(value, key);
       }
+      int size = dictionary.getDictionaryChunks().getSize();
+      return key + (size == 0 ? size : size - 1);
     }
-    return key + dictionary.getDictionaryChunks().getSize();
+    return key;
   }
 
   @Override public Integer getKey(Object value) {
     Integer key = dictionary.getSurrogateKey(value.toString());
-    if (key == CarbonCommonConstants.NOT_FOUND_SURROGATE_KEY ) {
+    if (key == CarbonCommonConstants.INVALID_SURROGATE_KEY ) {
       key = localCache.get(value);
+      if (key != null) {
+        int size = dictionary.getDictionaryChunks().getSize();
+        return key + (size == 0 ? size : size - 1);
+      }
     }
     return key;
   }

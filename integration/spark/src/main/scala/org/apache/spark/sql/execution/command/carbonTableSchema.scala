@@ -21,11 +21,14 @@ import java.io.File
 import java.text.SimpleDateFormat
 import java.util
 import java.util.UUID
+import java.util.concurrent.Callable
+import java.util.concurrent.Executors
+import java.util.concurrent.ExecutorService
+import java.util.concurrent.Future
 
 import scala.collection.JavaConverters._
 import scala.collection.mutable.{ArrayBuffer, Map}
 import scala.language.implicitConversions
-import scala.util.Random
 
 import org.apache.spark.SparkEnv
 import org.apache.spark.sql._
@@ -45,11 +48,11 @@ import org.apache.carbondata.core.carbon.metadata.datatype.DataType
 import org.apache.carbondata.core.carbon.metadata.encoder.Encoding
 import org.apache.carbondata.core.carbon.metadata.schema.{SchemaEvolution, SchemaEvolutionEntry}
 import org.apache.carbondata.core.carbon.metadata.schema.table.{CarbonTable, TableInfo, TableSchema}
-import org.apache.carbondata.core.carbon.metadata.schema.table.column.{CarbonDimension,
-ColumnSchema}
+import org.apache.carbondata.core.carbon.metadata.schema.table.column.{CarbonDimension, ColumnSchema}
 import org.apache.carbondata.core.carbon.path.CarbonStorePath
 import org.apache.carbondata.core.constants.CarbonCommonConstants
 import org.apache.carbondata.core.datastorage.store.impl.FileFactory
+import org.apache.carbondata.core.dictionary.server.DictionaryServer
 import org.apache.carbondata.core.load.LoadMetadataDetails
 import org.apache.carbondata.core.util.{CarbonProperties, CarbonUtil}
 import org.apache.carbondata.integration.spark.merger.CompactionType
@@ -62,8 +65,7 @@ import org.apache.carbondata.spark.CarbonSparkFactory
 import org.apache.carbondata.spark.exception.MalformedCarbonCommandException
 import org.apache.carbondata.spark.load._
 import org.apache.carbondata.spark.rdd.CarbonDataRDDFactory
-import org.apache.carbondata.spark.util.{CarbonScalaUtil, DataTypeConverterUtil,
-GlobalDictionaryUtil}
+import org.apache.carbondata.spark.util.{CarbonScalaUtil, DataTypeConverterUtil, GlobalDictionaryUtil}
 
 case class tableModel(
     ifNotExistsSet: Boolean,
@@ -766,16 +768,17 @@ case class LoadTable(
       val kettleHomePath = CarbonScalaUtil.getKettleHome(sqlContext)
 
       // TODO It will be removed after kettle is removed.
-      val useKettle = options.get("use_kettle") match {
-        case Some(value) => value.toBoolean
-        case _ =>
-          val useKettleLocal = System.getProperty("use.kettle")
-          if (useKettleLocal == null) {
-            sqlContext.sparkContext.getConf.get("use_kettle_default", "true").toBoolean
-          } else {
-            useKettleLocal.toBoolean
-          }
-      }
+      val useKettle = false;
+//      options.get("use_kettle") match {
+//        case Some(value) => value.toBoolean
+//        case _ =>
+//          val useKettleLocal = System.getProperty("use.kettle")
+//          if (useKettleLocal == null) {
+//            sqlContext.sparkContext.getConf.get("use_kettle_default", "true").toBoolean
+//          } else {
+//            useKettleLocal.toBoolean
+//          }
+//      }
 
       val delimiter = options.getOrElse("delimiter", ",")
       val quoteChar = options.getOrElse("quotechar", "\"")
@@ -801,7 +804,7 @@ case class LoadTable(
           throw new MalformedCarbonCommandException(errorMessage)
       }
       val maxColumns = options.getOrElse("maxcolumns", null)
-      val useOnePass = options.getOrElse("useonepass", "false")
+      val useOnePass = options.getOrElse("useonepass", "true")
       carbonLoadModel.setMaxColumns(maxColumns)
       carbonLoadModel.setEscapeChar(escapeChar)
       carbonLoadModel.setQuoteChar(quoteChar)
@@ -833,6 +836,8 @@ case class LoadTable(
       carbonLoadModel.setAllDictPath(allDictionaryPath)
 
       var partitionStatus = CarbonCommonConstants.STORE_LOADSTATUS_SUCCESS
+      var result: Future[DictionaryServer] = null
+      var executorService: ExecutorService = null
       try {
         // First system has to partition the data first and then call the load data
         if (null == relation.tableMeta.partitioner.partitionColumn ||
@@ -845,18 +850,30 @@ case class LoadTable(
           carbonLoadModel.setDirectLoad(true)
         }
 
-        if (carbonLoadModel.getUseOnePass == false) {
-          GlobalDictionaryUtil
-            .generateGlobalDictionary(sqlContext, carbonLoadModel, relation.tableMeta.storePath,
-              dataFrame)
-        } else {
+        // when use one pass, and data frame is not defined
+        if (carbonLoadModel.getUseOnePass && !dataFrame.isDefined) {
           val dictionaryServerPort = CarbonProperties.getInstance()
             .getProperty(CarbonCommonConstants.DICTIONARY_SERVER_PORT,
               CarbonCommonConstants.DICTIONARY_SERVER_PORT_DEFAULT);
           carbonLoadModel.setDictionaryServerPort(Integer.parseInt(dictionaryServerPort));
           val sparkDriverHost = sqlContext.sparkContext.getConf.get("spark.driver.host")
           carbonLoadModel.setDictionaryServerHost(sparkDriverHost)
+          // start dictionary server when use one pass load.
+          executorService = Executors.newFixedThreadPool(1)
+          result = executorService.submit(new Callable[DictionaryServer]() {
+            @throws[Exception]
+            def call: DictionaryServer = {
+              val server: DictionaryServer = new DictionaryServer
+              server.startServer(dictionaryServerPort.toInt)
+              server
+            }
+          })
+        } else {
+          GlobalDictionaryUtil
+            .generateGlobalDictionary(sqlContext, carbonLoadModel, relation.tableMeta.storePath,
+              dataFrame)
         }
+
         CarbonDataRDDFactory.loadCarbonData(sqlContext,
             carbonLoadModel,
             relation.tableMeta.storePath,
@@ -874,6 +891,11 @@ case class LoadTable(
       } finally {
         // Once the data load is successful delete the unwanted partition files
         try {
+          // shutdown dictionary server
+          if (carbonLoadModel.getUseOnePass && !dataFrame.isDefined) {
+            result.get().shutdown()
+            executorService.shutdownNow()
+          }
           val fileType = FileFactory.getFileType(partitionLocation)
           if (FileFactory.isFileExist(partitionLocation, fileType)) {
             val file = FileFactory

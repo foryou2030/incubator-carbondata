@@ -18,12 +18,12 @@
  */
 package org.apache.carbondata.core.dictionary.generator;
 
-import java.io.IOException;
 import java.util.Map;
 import java.util.concurrent.ConcurrentHashMap;
 
 import org.apache.carbondata.core.carbon.metadata.CarbonMetadata;
 import org.apache.carbondata.core.carbon.metadata.schema.table.CarbonTable;
+import org.apache.carbondata.core.carbon.metadata.schema.table.column.CarbonDimension;
 import org.apache.carbondata.core.devapi.DictionaryGenerationException;
 import org.apache.carbondata.core.devapi.DictionaryGenerator;
 import org.apache.carbondata.core.dictionary.generator.key.DictionaryKey;
@@ -45,7 +45,14 @@ public class DictionaryGeneratorForServer implements DictionaryGenerator<Integer
   public void initializeGeneratorForTable(DictionaryKey key) {
     CarbonMetadata metadata = CarbonMetadata.getInstance();
     CarbonTable carbonTable = metadata.getCarbonTable(key.getTableUniqueName());
-    tableMap.put(key.getTableUniqueName(), new TableDictionaryGenerator(carbonTable));
+    CarbonDimension dimension = carbonTable.getAllDimensionByName(
+            key.getTableUniqueName(), key.getColumnName());
+    // initialize TableDictionaryGenerator first
+    if (tableMap.get(key.getTableUniqueName()) == null) {
+      tableMap.put(key.getTableUniqueName(), new TableDictionaryGenerator(dimension));
+    } else {
+      tableMap.get(key.getTableUniqueName()).updateGenerator(dimension);
+    }
   }
 
   public Integer size(DictionaryKey key) {
@@ -54,10 +61,9 @@ public class DictionaryGeneratorForServer implements DictionaryGenerator<Integer
     return generator.size(key);
   }
 
-  // write dictionary data
-  public void writeDictionaryData(DictionaryKey Key) throws IOException {
+  public void writeDictionaryData(DictionaryKey key) throws Exception {
     for (TableDictionaryGenerator generator : tableMap.values()) {
-      ((DictionaryWriter) generator).writeDictionaryData(Key);
+      ((DictionaryWriter) generator).writeDictionaryData(key);
     }
   }
 

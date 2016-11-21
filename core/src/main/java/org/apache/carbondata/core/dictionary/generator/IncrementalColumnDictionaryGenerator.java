@@ -30,6 +30,8 @@ import org.apache.carbondata.core.cache.dictionary.Dictionary;
 import org.apache.carbondata.core.cache.dictionary.DictionaryColumnUniqueIdentifier;
 import org.apache.carbondata.core.carbon.CarbonTableIdentifier;
 import org.apache.carbondata.core.carbon.ColumnIdentifier;
+import org.apache.carbondata.core.carbon.metadata.CarbonMetadata;
+import org.apache.carbondata.core.carbon.metadata.schema.table.CarbonTable;
 import org.apache.carbondata.core.carbon.metadata.schema.table.column.CarbonDimension;
 import org.apache.carbondata.core.carbon.path.CarbonTablePath;
 import org.apache.carbondata.core.constants.CarbonCommonConstants;
@@ -39,6 +41,7 @@ import org.apache.carbondata.core.devapi.DictionaryGenerator;
 import org.apache.carbondata.core.dictionary.generator.key.DictionaryKey;
 import org.apache.carbondata.core.service.DictionaryService;
 import org.apache.carbondata.core.service.PathService;
+import org.apache.carbondata.core.util.CarbonUtil;
 import org.apache.carbondata.core.util.CarbonUtilException;
 import org.apache.carbondata.core.util.DataTypeUtil;
 import org.apache.carbondata.core.writer.CarbonDictionaryWriter;
@@ -60,9 +63,13 @@ public class IncrementalColumnDictionaryGenerator
 
   private Map<String, Integer> incrementalCache = new ConcurrentHashMap<>();
 
+  private Map<Integer, String> reverseIncrementalCache = new ConcurrentHashMap<>();
+
   private int maxDictionary;
 
   private CarbonDimension dimension;
+
+  private CarbonDictionaryWriter dictionaryWriter = null;
 
   public IncrementalColumnDictionaryGenerator(CarbonDimension dimension, int maxValue) {
     this.maxDictionary = maxValue;
@@ -95,60 +102,89 @@ public class IncrementalColumnDictionaryGenerator
       if (dict == null) {
         dict = ++maxDictionary;
         incrementalCache.put(value, dict);
+        reverseIncrementalCache.put(dict, value);
       }
       return dict;
     }
   }
 
-  @Override public void writeDictionaryData(DictionaryKey key) throws IOException {
-    // write data to file system
-    CarbonTableIdentifier tableIdentifier = key.getTableIdentifier();
-    ColumnIdentifier columnIdentifier = key.getColumnIdentifier();
-    String storePath = key.getStorePath();
-
+  @Override public void writeDictionaryData(DictionaryKey key) throws Exception {
+    // initialize params
+    CarbonMetadata metadata = CarbonMetadata.getInstance();
+    CarbonTable carbonTable = metadata.getCarbonTable(key.getTableUniqueName());
+    CarbonTableIdentifier tableIdentifier = carbonTable.getCarbonTableIdentifier();
+    ColumnIdentifier columnIdentifier = dimension.getColumnIdentifier();
+    String storePath = carbonTable.getStorePath();
     DictionaryService dictionaryService = CarbonCommonFactory.getDictionaryService();
-    CarbonDictionaryWriter dictionaryWriter =
-            dictionaryService.getDictionaryWriter(tableIdentifier, columnIdentifier, storePath);
-
     PathService pathService = CarbonCommonFactory.getPathService();
     CarbonTablePath carbonTablePath = pathService.getCarbonTablePath(storePath, tableIdentifier);
-
-    CacheProvider cacheProvider = CacheProvider.getInstance();
-    Cache<DictionaryColumnUniqueIdentifier, Dictionary> cache =
-            cacheProvider.createCache(CacheType.REVERSE_DICTIONARY, carbonTablePath.getTableStatusFilePath());
+    // create dictionary cache from dictionary File
     DictionaryColumnUniqueIdentifier identifier =
-            new DictionaryColumnUniqueIdentifier(tableIdentifier, columnIdentifier, columnIdentifier.getDataType());
+            new DictionaryColumnUniqueIdentifier(tableIdentifier, columnIdentifier,
+                    columnIdentifier.getDataType());
+    Boolean isDictExists = isDictionaryExists(identifier, carbonTablePath);
     Dictionary dictionary = null;
-    try {
-      dictionary = cache.get(identifier);
-    } catch (CarbonUtilException e) {
-      System.out.println("Didn't find dictionary from cache! ");
-      dictionary = null;
+    if (isDictExists) {
+      Cache<DictionaryColumnUniqueIdentifier, Dictionary> dictCache = CacheProvider.getInstance()
+              .createCache(CacheType.REVERSE_DICTIONARY, storePath);
+      dictionary = dictCache.get(identifier);
     }
 
-    List<String> distinctValues = new ArrayList<>();
     // write dictionary
+    List<String> distinctValues = writeDictionary(dictionary,
+            dictionaryService, identifier, storePath, isDictExists);
+    // write sort index
+    writeSortIndex(distinctValues, dictionary,
+            dictionaryService, tableIdentifier, columnIdentifier, storePath);
+    // update Meta Data
+    updateMetaData();
+  }
+
+  /**
+   * write dictionary to file
+   *
+   * @param dictionary
+   * @param dictionaryService
+   * @param dictIdentifier
+   * @param storePath
+   * @return
+   * @throws IOException
+   */
+  private List<String> writeDictionary(Dictionary dictionary,
+                                       DictionaryService dictionaryService,
+                                       DictionaryColumnUniqueIdentifier dictIdentifier,
+                                       String storePath,
+                                       Boolean isDictExists) throws IOException {
+    List<String> distinctValues = new ArrayList<>();
     try {
-      //TODO: isFileExists replace dictionaryIsNull
-      if (dictionary == null) {
+      dictionaryWriter = dictionaryService
+              .getDictionaryWriter(dictIdentifier.getCarbonTableIdentifier(),
+                      dictIdentifier.getColumnIdentifier(), storePath);
+      if (!isDictExists) {
         dictionaryWriter.write(CarbonCommonConstants.MEMBER_DEFAULT_VAL);
         distinctValues.add(CarbonCommonConstants.MEMBER_DEFAULT_VAL);
       }
-      if (incrementalCache.size() > 1) {
-        // TODO: map need sort first
-        for (String value : incrementalCache.keySet()) {
-          String parsedValue = DataTypeUtil
-                  .normalizeColumnValueForItsDataType(value, dimension);
-          if (null != parsedValue) {
-            if (dictionary == null) {
+      // write value to dictionary file
+      if (reverseIncrementalCache.size() >= 1) {
+        if (isDictExists) {
+          for (int i = 2; i < reverseIncrementalCache.size() + 2; i++) {
+            String value = reverseIncrementalCache.get(i);
+            String parsedValue = DataTypeUtil
+                    .normalizeColumnValueForItsDataType(value, dimension);
+            if (null != parsedValue && dictionary.getSurrogateKey(parsedValue) ==
+                    CarbonCommonConstants.INVALID_SURROGATE_KEY) {
               dictionaryWriter.write(parsedValue);
               distinctValues.add(parsedValue);
-            } else {
-              if (dictionary.getSurrogateKey(parsedValue) ==
-                      CarbonCommonConstants.INVALID_SURROGATE_KEY) {
-                dictionaryWriter.write(parsedValue);
-                distinctValues.add(parsedValue);
-              }
+            }
+          }
+        } else {
+          for (int i = 2; i < reverseIncrementalCache.size() + 2; i++) {
+            String value = reverseIncrementalCache.get(i);
+            String parsedValue = DataTypeUtil
+                    .normalizeColumnValueForItsDataType(value, dimension);
+            if (null != parsedValue) {
+              dictionaryWriter.write(parsedValue);
+              distinctValues.add(parsedValue);
             }
           }
         }
@@ -160,7 +196,27 @@ public class IncrementalColumnDictionaryGenerator
         dictionaryWriter.close();
       }
     }
-    // write sort index
+
+    return distinctValues;
+  }
+
+  /**
+   * write dictionary sort index to file
+   *
+   * @param distinctValues
+   * @param dictionary
+   * @param dictionaryService
+   * @param tableIdentifier
+   * @param columnIdentifier
+   * @param storePath
+   * @throws IOException
+   */
+  private void writeSortIndex(List<String> distinctValues,
+                              Dictionary dictionary,
+                              DictionaryService dictionaryService,
+                              CarbonTableIdentifier tableIdentifier,
+                              ColumnIdentifier columnIdentifier,
+                              String storePath) throws IOException{
     CarbonDictionarySortIndexWriter carbonDictionarySortIndexWriter = null;
     try {
       if (distinctValues.size() > 0) {
@@ -182,5 +238,33 @@ public class IncrementalColumnDictionaryGenerator
         carbonDictionarySortIndexWriter.close();
       }
     }
+  }
+
+  /**
+   * update dictionary metadata
+   */
+  private void updateMetaData() throws IOException{
+    if (null != dictionaryWriter) {
+      dictionaryWriter.commit();
+    }
+  }
+
+  /**
+   * check dictionary file exists
+   *
+   * @param dictIdentifier
+   * @param carbonTablePath
+   * @return
+   */
+  private Boolean isDictionaryExists(DictionaryColumnUniqueIdentifier dictIdentifier,
+                                     CarbonTablePath carbonTablePath) {
+    String dictionaryFilePath =
+            carbonTablePath.getDictionaryFilePath(dictIdentifier
+                    .getColumnIdentifier().getColumnId());
+    String dictionaryMetadataFilePath =
+            carbonTablePath.getDictionaryMetaFilePath(dictIdentifier
+                    .getColumnIdentifier().getColumnId());
+    return CarbonUtil.isFileExists(dictionaryFilePath) && CarbonUtil
+            .isFileExists(dictionaryMetadataFilePath);
   }
 }

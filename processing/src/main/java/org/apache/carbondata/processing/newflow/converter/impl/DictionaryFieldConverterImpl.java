@@ -71,17 +71,17 @@ public class DictionaryFieldConverterImpl extends AbstractDictionaryFieldConvert
             dataField.getColumn().getColumnIdentifier(), dataField.getColumn().getDataType());
 
     Dictionary dictionary = null;
-  // if use one pass, use DictionaryServerClientDictionary
+    // if use one pass, use DictionaryServerClientDictionary
     if (useOnePass) {
       try{
         dictionary = cache.get(identifier);
       } catch (CarbonUtilException e) {
-        dictionary = new ForwardDictionary(new ColumnDictionaryInfo(dataField.getColumn().getDataType()));
+        // TODO: need to initialize dictionary
+        dictionary = new ForwardDictionary(
+                new ColumnDictionaryInfo(dataField.getColumn().getDataType()));
       }
       dictionaryKey = new DictionaryKey(carbonTableIdentifier.getTableUniqueName(),
-          carbonDimension.getColName(),
-          null, null, carbonTableIdentifier,
-          dataField.getColumn().getColumnIdentifier(), storePath);
+          carbonDimension.getColName(), null, null);
       // for table initialization
       dictionaryKey.setMessage(MESSAGETYPE.TABLE_INITIALIZATION);
       client.getDictionary(dictionaryKey);
@@ -120,7 +120,8 @@ public class DictionaryFieldConverterImpl extends AbstractDictionaryFieldConvert
     cardinality.add(dictionaryGenerator.size());
   }
 
-  public DictionaryKey getDictionaryKey(){
+  @Override
+  public DictionaryKey getDictionaryKey() {
     return dictionaryKey;
   }
 }

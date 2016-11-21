@@ -18,12 +18,10 @@
  */
 package org.apache.carbondata.core.dictionary.generator;
 
-import java.io.IOException;
-import java.util.List;
 import java.util.Map;
 import java.util.concurrent.ConcurrentHashMap;
 
-import org.apache.carbondata.core.carbon.metadata.encoder.Encoding;
+import org.apache.carbondata.core.carbon.metadata.CarbonMetadata;
 import org.apache.carbondata.core.carbon.metadata.schema.table.CarbonTable;
 import org.apache.carbondata.core.carbon.metadata.schema.table.column.CarbonDimension;
 import org.apache.carbondata.core.devapi.BiDictionary;
@@ -39,34 +37,45 @@ public class TableDictionaryGenerator
 
   private Map<String, DictionaryGenerator<Integer, String>> columnMap = new ConcurrentHashMap<>();
 
-  public TableDictionaryGenerator(CarbonTable carbonTable) {
-    List<CarbonDimension> dimensions =
-        carbonTable.getDimensionByTableName(carbonTable.getFactTableName());
-    for (int i = 0; i < dimensions.size(); i++) {
-      CarbonDimension dimension = dimensions.get(i);
-      if (dimension.hasEncoding(Encoding.DICTIONARY) && !dimension
-          .hasEncoding(Encoding.DIRECT_DICTIONARY)) {
-        columnMap
-            .put(dimension.getColumnId(), new IncrementalColumnDictionaryGenerator(dimension, 1));
-      }
-    }
+  public TableDictionaryGenerator(CarbonDimension dimension) {
+    columnMap.put(dimension.getColumnId(),
+            new IncrementalColumnDictionaryGenerator(dimension, 1));
   }
 
   @Override public Integer generateKey(DictionaryKey value) throws DictionaryGenerationException {
+    CarbonMetadata metadata = CarbonMetadata.getInstance();
+    CarbonTable carbonTable = metadata.getCarbonTable(value.getTableUniqueName());
+    CarbonDimension dimension = carbonTable.getAllDimensionByName(
+            value.getTableUniqueName(), value.getColumnName());
+
     DictionaryGenerator<Integer, String> generator =
-            columnMap.get(value.getColumnIdentifier().getColumnId());
+            columnMap.get(dimension.getColumnId());
     return generator.generateKey(value.getData().toString());
   }
 
   public Integer size(DictionaryKey key) {
+    CarbonMetadata metadata = CarbonMetadata.getInstance();
+    CarbonTable carbonTable = metadata.getCarbonTable(key.getTableUniqueName());
+    CarbonDimension dimension = carbonTable.getAllDimensionByName(
+            key.getTableUniqueName(), key.getColumnName());
+
     DictionaryGenerator<Integer, String> generator =
-            columnMap.get(key.getColumnIdentifier().getColumnId());
+            columnMap.get(dimension.getColumnId());
     return ((BiDictionary) generator).size();
   }
 
-  @Override public void writeDictionaryData(DictionaryKey key) throws IOException {
-    for (DictionaryGenerator generator : columnMap.values()) {
-      ((DictionaryWriter) (generator)).writeDictionaryData(key);
-    }
+  @Override public void writeDictionaryData(DictionaryKey key) throws Exception {
+    CarbonMetadata metadata = CarbonMetadata.getInstance();
+    CarbonTable carbonTable = metadata.getCarbonTable(key.getTableUniqueName());
+    CarbonDimension dimension = carbonTable.getAllDimensionByName(
+            key.getTableUniqueName(), key.getColumnName());
+
+    DictionaryGenerator generator = columnMap.get(dimension.getColumnId());
+    ((DictionaryWriter) (generator)).writeDictionaryData(key);
+  }
+
+  public void updateGenerator(CarbonDimension dimension) {
+    columnMap.put(dimension.getColumnId(),
+            new IncrementalColumnDictionaryGenerator(dimension, 1));
   }
 }
