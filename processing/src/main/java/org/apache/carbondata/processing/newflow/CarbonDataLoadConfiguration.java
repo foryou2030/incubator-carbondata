@@ -38,6 +38,24 @@ public class CarbonDataLoadConfiguration {
 
   private Map<String, Object> dataLoadProperties = new HashMap<>();
 
+  /**
+   *  Use one pass to generate dictionary
+   */
+  private boolean useOnePass;
+
+  /**
+   * dictionary server host
+   */
+  private String dictionaryServerHost;
+
+  /**
+   * dictionary sever port
+   */
+  private int dictionaryServerPort;
+
+  public CarbonDataLoadConfiguration() {
+  }
+
   public int getDimensionCount() {
     int dimCount = 0;
     for (int i = 0; i < dataFields.length; i++) {
@@ -141,4 +159,29 @@ public class CarbonDataLoadConfiguration {
   public Object getDataLoadProperty(String key) {
     return dataLoadProperties.get(key);
   }
+
+  public boolean getUseOnePass() {
+    return useOnePass;
+  }
+
+  public void setUseOnePass(boolean useOnePass) {
+    this.useOnePass = useOnePass;
+  }
+
+  public String getDictionaryServerHost() {
+    return dictionaryServerHost;
+  }
+
+  public void setDictionaryServerHost(String dictionaryServerHost) {
+    this.dictionaryServerHost = dictionaryServerHost;
+  }
+
+  public int getDictionaryServerPort() {
+    return dictionaryServerPort;
+  }
+
+  public void setDictionaryServerPort(int dictionaryServerPort) {
+    this.dictionaryServerPort = dictionaryServerPort;
+  }
+
 }

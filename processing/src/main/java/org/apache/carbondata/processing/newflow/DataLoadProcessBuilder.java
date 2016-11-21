@@ -42,6 +42,8 @@ import org.apache.carbondata.processing.newflow.steps.InputProcessorStepImpl;
 import org.apache.carbondata.processing.newflow.steps.SortProcessorStepImpl;
 import org.apache.carbondata.processing.util.CarbonDataProcessorUtil;
 
+import org.apache.commons.lang3.StringUtils;
+
 /**
  * It builds the pipe line of steps for loading data to carbon.
  */
@@ -96,6 +98,10 @@ public final class DataLoadProcessBuilder {
           CarbonDataProcessorUtil.getCsvFileToRead(loadModel.getFactFilesToProcess().get(0));
       csvFileName = csvFile.getName();
       csvHeader = CarbonDataProcessorUtil.getFileHeader(csvFile);
+      // if firstRow = " ", then throw exception
+      if (StringUtils.isNotEmpty(csvHeader) && StringUtils.isBlank(csvHeader)) {
+        throw new CarbonDataLoadingException("First line of the csv is not valid.");
+      }
       configuration.setHeader(
           CarbonDataProcessorUtil.getColumnFields(csvHeader, loadModel.getCsvDelimiter()));
     }
@@ -165,6 +171,11 @@ public final class DataLoadProcessBuilder {
       }
     }
     configuration.setDataFields(dataFields.toArray(new DataField[dataFields.size()]));
+    // configuration for one pass load: dictionary server info
+    configuration.setUseOnePass(loadModel.getUseOnePass());
+    configuration.setDictionaryServerHost(loadModel.getDictionaryServerHost());
+    configuration.setDictionaryServerPort(loadModel.getDictionaryServerPort());
+
     return configuration;
   }
 
