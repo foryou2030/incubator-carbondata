@@ -18,6 +18,7 @@
  */
 package org.apache.carbondata.core.dictionary.generator;
 
+import java.io.IOException;
 import java.util.Map;
 import java.util.concurrent.ConcurrentHashMap;
 
@@ -54,9 +55,9 @@ public class DictionaryGeneratorForServer implements DictionaryGenerator<Integer
   }
 
   // write dictionary data
-  public void writeDictionaryData() {
+  public void writeDictionaryData(DictionaryKey Key) throws IOException {
     for (TableDictionaryGenerator generator : tableMap.values()) {
-      ((DictionaryWriter) generator).writeDictionaryData();
+      ((DictionaryWriter) generator).writeDictionaryData(Key);
     }
   }
 

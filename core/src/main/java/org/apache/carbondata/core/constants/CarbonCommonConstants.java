@@ -640,6 +640,11 @@ public final class CarbonCommonConstants {
   public static final int INVALID_SURROGATE_KEY = -1;
 
   /**
+   * if getSurrogateKey not found, return 0
+   */
+  public static final int NOT_FOUND_SURROGATE_KEY = 0;
+
+  /**
    * surrogate key for MEMBER_DEFAULT_VAL
    */
   public static final int MEMBER_DEFAULT_VAL_SURROGATE_KEY = 1;
@@ -893,6 +898,16 @@ public final class CarbonCommonConstants {
    * Default size of data load batch size.
    */
   public static final String DATA_LOAD_BATCH_SIZE_DEFAULT = "1000";
+
+  /**
+   * carbon dictionary server port
+   */
+  public static final String DICTIONARY_SERVER_PORT = "carbon.dictionary.server.port";
+
+  /**
+   * Default carbon dictionary server port
+   */
+  public static final String DICTIONARY_SERVER_PORT_DEFAULT = "1116";
 
   private CarbonCommonConstants() {
   }

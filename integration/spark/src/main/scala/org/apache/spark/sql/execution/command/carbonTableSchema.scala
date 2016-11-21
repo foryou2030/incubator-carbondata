@@ -801,6 +801,7 @@ case class LoadTable(
           throw new MalformedCarbonCommandException(errorMessage)
       }
       val maxColumns = options.getOrElse("maxcolumns", null)
+      val useOnePass = options.getOrElse("useonepass", "false")
       carbonLoadModel.setMaxColumns(maxColumns)
       carbonLoadModel.setEscapeChar(escapeChar)
       carbonLoadModel.setQuoteChar(quoteChar)
@@ -815,6 +816,7 @@ case class LoadTable(
       carbonLoadModel
         .setBadRecordsAction(
           TableOptionConstant.BAD_RECORDS_ACTION.getName + "," + badRecordsLoggerRedirect)
+      carbonLoadModel.setUseOnePass(useOnePass.toBoolean)
 
       if (delimiter.equalsIgnoreCase(complex_delimiter_level_1) ||
           complex_delimiter_level_1.equalsIgnoreCase(complex_delimiter_level_2) ||
@@ -842,9 +844,19 @@ case class LoadTable(
           carbonLoadModel.setColDictFilePath(columnDict)
           carbonLoadModel.setDirectLoad(true)
         }
-        GlobalDictionaryUtil
-          .generateGlobalDictionary(sqlContext, carbonLoadModel, relation.tableMeta.storePath,
-            dataFrame)
+
+        if (carbonLoadModel.getUseOnePass == false) {
+          GlobalDictionaryUtil
+            .generateGlobalDictionary(sqlContext, carbonLoadModel, relation.tableMeta.storePath,
+              dataFrame)
+        } else {
+          val dictionaryServerPort = CarbonProperties.getInstance()
+            .getProperty(CarbonCommonConstants.DICTIONARY_SERVER_PORT,
+              CarbonCommonConstants.DICTIONARY_SERVER_PORT_DEFAULT);
+          carbonLoadModel.setDictionaryServerPort(Integer.parseInt(dictionaryServerPort));
+          val sparkDriverHost = sqlContext.sparkContext.getConf.get("spark.driver.host")
+          carbonLoadModel.setDictionaryServerHost(sparkDriverHost)
+        }
         CarbonDataRDDFactory.loadCarbonData(sqlContext,
             carbonLoadModel,
             relation.tableMeta.storePath,

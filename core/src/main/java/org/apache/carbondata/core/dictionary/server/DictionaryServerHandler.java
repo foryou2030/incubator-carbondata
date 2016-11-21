@@ -54,13 +54,13 @@ public class DictionaryServerHandler extends SimpleChannelHandler {
     switch (key.getMessageType()) {
       case DICTIONARY_GENERATION:
         return generatorForServer.generateKey(key);
-      case TABLE_INTIALIZATION:
+      case TABLE_INITIALIZATION:
         generatorForServer.initializeGeneratorForTable(key);
         return 0;
       case SIZE:
         return generatorForServer.size(key);
       case WRITE_DICTIONARY:
-        generatorForServer.writeDictionaryData();
+        generatorForServer.writeDictionaryData(key);
         return 0;
       default:
         return -1;

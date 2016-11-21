@@ -28,6 +28,8 @@ import org.apache.carbondata.core.cache.CacheType;
 import org.apache.carbondata.core.cache.dictionary.Dictionary;
 import org.apache.carbondata.core.cache.dictionary.DictionaryColumnUniqueIdentifier;
 import org.apache.carbondata.core.dictionary.client.DictionaryClient;
+import org.apache.carbondata.core.dictionary.generator.key.DictionaryKey;
+import org.apache.carbondata.core.dictionary.generator.key.MESSAGETYPE;
 import org.apache.carbondata.core.util.CarbonTimeStatisticsFactory;
 import org.apache.carbondata.processing.newflow.CarbonDataLoadConfiguration;
 import org.apache.carbondata.processing.newflow.DataField;
@@ -35,6 +37,7 @@ import org.apache.carbondata.processing.newflow.constants.DataLoadProcessorConst
 import org.apache.carbondata.processing.newflow.converter.BadRecordLogHolder;
 import org.apache.carbondata.processing.newflow.converter.FieldConverter;
 import org.apache.carbondata.processing.newflow.converter.RowConverter;
+import org.apache.carbondata.processing.newflow.dictionary.DictionaryServerClientDictionary;
 import org.apache.carbondata.processing.newflow.exception.CarbonDataLoadingException;
 import org.apache.carbondata.processing.newflow.row.CarbonRow;
 import org.apache.carbondata.processing.surrogatekeysgenerator.csvbased.BadRecordsLogger;
@@ -55,6 +58,7 @@ public class RowConverterImpl implements RowConverter {
 
   private BadRecordLogHolder logHolder;
 
+  private DictionaryClient dictClient;
 
   public RowConverterImpl(DataField[] fields, CarbonDataLoadConfiguration configuration,
       BadRecordsLogger badRecordLogger) {
@@ -65,19 +69,6 @@ public class RowConverterImpl implements RowConverter {
 
   @Override
   public void initialize() {
-    ExecutorService executorService = Executors.newFixedThreadPool(1);
-    Future<DictionaryClient> result = executorService.submit(new Callable<DictionaryClient>() {
-      @Override public DictionaryClient call() throws Exception {
-        DictionaryClient dictionaryClient = new DictionaryClient();
-        dictionaryClient.startClient("127.0.0.1", 1118);
-        return dictionaryClient;
-      }
-    });
-    try {
-      Thread.sleep(1000);
-    } catch (InterruptedException e) {
-      e.printStackTrace();
-    }
     CacheProvider cacheProvider = CacheProvider.getInstance();
     Cache<DictionaryColumnUniqueIdentifier, Dictionary> cache =
         cacheProvider.createCache(CacheType.REVERSE_DICTIONARY,
@@ -89,20 +80,38 @@ public class RowConverterImpl implements RowConverter {
 
     long lruCacheStartTime = System.currentTimeMillis();
 
-    DictionaryClient client = null;
-    try {
-      client = result.get();
-    } catch (InterruptedException e) {
-      e.printStackTrace();
-    } catch (ExecutionException e) {
-      e.printStackTrace();
-    }
+    // for one pass load, start the dictionary client
+    if (configuration.getUseOnePass()) {
+      ExecutorService executorService = Executors.newFixedThreadPool(1);
+      Future<DictionaryClient> result = executorService.submit(new Callable<DictionaryClient>() {
+        @Override
+        public DictionaryClient call() throws Exception {
+          DictionaryClient dictionaryClient = new DictionaryClient();
+          dictionaryClient.startClient(configuration.getDictionaryServerHost(),
+                  configuration.getDictionaryServerPort());
+          return dictionaryClient;
+        }
+      });
 
+      try {
+        Thread.sleep(1000);
+      } catch (InterruptedException e) {
+        e.printStackTrace();
+      }
+
+      try {
+        dictClient = result.get();
+      } catch (InterruptedException e) {
+        e.printStackTrace();
+      } catch (ExecutionException e) {
+        e.printStackTrace();
+      }
+    }
     for (int i = 0; i < fields.length; i++) {
       FieldConverter fieldConverter = FieldEncoderFactory.getInstance()
           .createFieldEncoder(fields[i], cache,
               configuration.getTableIdentifier().getCarbonTableIdentifier(), i, nullFormat,
-              client);
+              dictClient, configuration.getCarbonStorePath(), configuration.getUseOnePass());
       fieldConverterList.add(fieldConverter);
     }
     CarbonTimeStatisticsFactory.getLoadStatisticsInstance()
@@ -134,6 +143,16 @@ public class RowConverterImpl implements RowConverter {
       if (fieldConverters[i] instanceof AbstractDictionaryFieldConverterImpl) {
         ((AbstractDictionaryFieldConverterImpl) fieldConverters[i])
             .fillColumnCardinality(dimCardinality);
+
+        // for one pass load, finally write dictionary to file
+        if (configuration.getUseOnePass()) {
+          if (fieldConverters[i] instanceof DictionaryFieldConverterImpl){
+            DictionaryKey dictionaryKey =
+                    ((DictionaryFieldConverterImpl) fieldConverters[i]).getDictionaryKey();
+            dictionaryKey.setMessage(MESSAGETYPE.WRITE_DICTIONARY);
+            dictClient.getDictionary(dictionaryKey);
+          }
+        }
       }
     }
     int[] cardinality = new int[dimCardinality.size()];

@@ -18,6 +18,9 @@
  */
 package org.apache.carbondata.core.dictionary.generator.key;
 
+import org.apache.carbondata.core.carbon.CarbonTableIdentifier;
+import org.apache.carbondata.core.carbon.ColumnIdentifier;
+
 import java.io.Serializable;
 
 /**
@@ -33,12 +36,22 @@ public class DictionaryKey implements Serializable {
 
   private MESSAGETYPE type;
 
+  private CarbonTableIdentifier tableIdentifier;
+
+  private ColumnIdentifier columnIdentifier;
+
+  private String storePath;
+
   public DictionaryKey(String tableUniqueName, String columnName, String data,
-      MESSAGETYPE messagetype) {
+                       MESSAGETYPE messagetype, CarbonTableIdentifier tableIdentifier,
+                       ColumnIdentifier columnIdentifier, String storePath) {
     this.tableUniqueName = tableUniqueName;
     this.columnName = columnName;
     this.data = data;
     this.type = messagetype;
+    this.tableIdentifier = tableIdentifier;
+    this.columnIdentifier = columnIdentifier;
+    this.storePath = storePath;
   }
 
   public String getTableUniqueName() {
@@ -63,5 +76,17 @@ public class DictionaryKey implements Serializable {
 
   public MESSAGETYPE getMessageType() {
     return type;
+  }
+
+  public CarbonTableIdentifier getTableIdentifier() {
+    return tableIdentifier;
+  }
+
+  public ColumnIdentifier getColumnIdentifier() {
+    return columnIdentifier;
+  }
+
+  public String getStorePath() {
+    return storePath;
   }
 }

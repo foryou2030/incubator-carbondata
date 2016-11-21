@@ -80,4 +80,5 @@ public class DirectDictionaryFieldConverterImpl extends AbstractDictionaryFieldC
   public void fillColumnCardinality(List<Integer> cardinality) {
     cardinality.add(Integer.MAX_VALUE);
   }
+
 }

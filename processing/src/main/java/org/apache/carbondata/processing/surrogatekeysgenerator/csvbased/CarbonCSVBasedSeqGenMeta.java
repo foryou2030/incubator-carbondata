@@ -386,6 +386,8 @@ public class CarbonCSVBasedSeqGenMeta extends BaseStepMeta implements StepMetaIn
    */
   private String columnsDataTypeString;
 
+  private boolean useOnePass;
+
   public CarbonCSVBasedSeqGenMeta() {
     super();
   }
@@ -655,6 +657,7 @@ public class CarbonCSVBasedSeqGenMeta extends BaseStepMeta implements StepMetaIn
     columnsDataTypeString="";
     tableOption = "";
     dateFormat = "";
+    useOnePass = false;
   }
 
   // helper method to allocate the arrays
@@ -721,6 +724,7 @@ public class CarbonCSVBasedSeqGenMeta extends BaseStepMeta implements StepMetaIn
         .append(XMLHandler.addTagValue("columnSchemaDetails", columnSchemaDetails));
     retval.append("    ")
         .append(XMLHandler.addTagValue("tableOption", tableOption));
+    retval.append("    ").append(XMLHandler.addTagValue("useOnePass", useOnePass));
     return retval.toString();
   }
 
@@ -785,6 +789,8 @@ public class CarbonCSVBasedSeqGenMeta extends BaseStepMeta implements StepMetaIn
       metaHeirSQLQuery = XMLHandler.getTagValue(stepnode, "metadataFilePath");
 
       isAggregate = "Y".equalsIgnoreCase(XMLHandler.getTagValue(stepnode, "isAggregate"));
+
+      useOnePass = "Y".equalsIgnoreCase(XMLHandler.getTagValue(stepnode, "useOnePass"));
 
       int nrKeys = XMLHandler.countNodes(stepnode, "lookup");
       allocate(nrKeys);
@@ -1340,6 +1346,7 @@ public class CarbonCSVBasedSeqGenMeta extends BaseStepMeta implements StepMetaIn
       columnSchemaDetails = rep.getStepAttributeString(idStep, "columnSchemaDetails");
       tableOption = rep.getStepAttributeString(idStep, "tableOption");
       dateFormat = rep.getStepAttributeString(idStep, "dateFormat");
+      useOnePass = rep.getStepAttributeBoolean(idStep, "useOnePass");
       int nrKeys = rep.countNrStepAttributes(idStep, "lookup_keyfield");
       allocate(nrKeys);
     } catch (Exception e) {
@@ -1394,6 +1401,7 @@ public class CarbonCSVBasedSeqGenMeta extends BaseStepMeta implements StepMetaIn
       rep.saveStepAttribute(idTransformation, idStep, "columnSchemaDetails", columnSchemaDetails);
       rep.saveStepAttribute(idTransformation, idStep, "tableOption", tableOption);
       rep.saveStepAttribute(idTransformation, idStep, "dateFormat", dateFormat);
+      rep.saveStepAttribute(idTransformation, idStep, "useOnePass", useOnePass);
     } catch (Exception e) {
       throw new KettleException(
           BaseMessages.getString(pkg, "CarbonStep.Exception.UnableToSaveStepInfoToRepository")
@@ -1694,5 +1702,9 @@ public class CarbonCSVBasedSeqGenMeta extends BaseStepMeta implements StepMetaIn
   public TableOptionWrapper getTableOptionWrapper() {
     return tableOptionWrapper;
   }
+
+  public boolean getUseOnePass() { return useOnePass; }
+
+  public void setUseOnePass(boolean useOnePass) { this.useOnePass = useOnePass; }
 }
 

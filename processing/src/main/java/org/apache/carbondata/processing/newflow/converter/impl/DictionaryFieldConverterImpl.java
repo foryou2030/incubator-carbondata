@@ -26,12 +26,8 @@ import java.util.Map;
 import org.apache.carbondata.common.logging.LogService;
 import org.apache.carbondata.common.logging.LogServiceFactory;
 import org.apache.carbondata.core.cache.Cache;
-import org.apache.carbondata.core.cache.dictionary.ColumnDictionaryInfo;
-import org.apache.carbondata.core.cache.dictionary.Dictionary;
-import org.apache.carbondata.core.cache.dictionary.DictionaryColumnUniqueIdentifier;
-import org.apache.carbondata.core.cache.dictionary.ForwardDictionary;
+import org.apache.carbondata.core.cache.dictionary.*;
 import org.apache.carbondata.core.carbon.CarbonTableIdentifier;
-import org.apache.carbondata.core.carbon.metadata.datatype.DataType;
 import org.apache.carbondata.core.carbon.metadata.schema.table.column.CarbonDimension;
 import org.apache.carbondata.core.constants.CarbonCommonConstants;
 import org.apache.carbondata.core.devapi.BiDictionary;
@@ -61,41 +57,47 @@ public class DictionaryFieldConverterImpl extends AbstractDictionaryFieldConvert
 
   private String nullFormat;
 
+  private DictionaryKey dictionaryKey;
+
   public DictionaryFieldConverterImpl(DataField dataField,
       Cache<DictionaryColumnUniqueIdentifier, Dictionary> cache,
       CarbonTableIdentifier carbonTableIdentifier, String nullFormat, int index,
-      DictionaryClient client) {
+      DictionaryClient client, String storePath, Boolean useOnePass) {
     this.index = index;
     this.carbonDimension = (CarbonDimension) dataField.getColumn();
     this.nullFormat = nullFormat;
     DictionaryColumnUniqueIdentifier identifier =
         new DictionaryColumnUniqueIdentifier(carbonTableIdentifier,
             dataField.getColumn().getColumnIdentifier(), dataField.getColumn().getDataType());
-    try {
-      Dictionary dictionary = null;
-      if (true) {
-        dictionary = new ForwardDictionary(new ColumnDictionaryInfo(DataType.STRING));
-        DictionaryKey dictionaryKey = new DictionaryKey(carbonTableIdentifier.getTableUniqueName(),
-            carbonDimension.getColName(),
-            null,
-            MESSAGETYPE.TABLE_INTIALIZATION);
-        Map<Object, Integer> localCache = new HashMap<>();
-        dictionaryGenerator = new DictionaryServerClientDictionary(dictionary, client,
-            dictionaryKey, localCache);
-        try {
-          dictionaryGenerator.getOrGenerateKey(dictionaryKey);
-        } catch (DictionaryGenerationException e) {
-          e.printStackTrace();
-        }
 
-
-      } else {
+    Dictionary dictionary = null;
+  // if use one pass, use DictionaryServerClientDictionary
+    if (useOnePass) {
+      try{
+        dictionary = cache.get(identifier);
+      } catch (CarbonUtilException e) {
+        dictionary = new ForwardDictionary(new ColumnDictionaryInfo(dataField.getColumn().getDataType()));
+      }
+      dictionaryKey = new DictionaryKey(carbonTableIdentifier.getTableUniqueName(),
+          carbonDimension.getColName(),
+          null, null, carbonTableIdentifier,
+          dataField.getColumn().getColumnIdentifier(), storePath);
+      // for table initialization
+      dictionaryKey.setMessage(MESSAGETYPE.TABLE_INITIALIZATION);
+      client.getDictionary(dictionaryKey);
+      Map<Object, Integer> localCache = new HashMap<>();
+      // for generate dictionary
+      dictionaryKey.setMessage(MESSAGETYPE.DICTIONARY_GENERATION);
+      dictionaryGenerator = new DictionaryServerClientDictionary(dictionary, client,
+              dictionaryKey, localCache);
+    } else {
+      try {
         dictionary = cache.get(identifier);
         dictionaryGenerator = new PreCreatedDictionary(dictionary);
+      } catch (CarbonUtilException e) {
+        LOGGER.error(e);
+        throw new RuntimeException(e);
       }
-    } catch (CarbonUtilException e) {
-      LOGGER.error(e);
-      throw new RuntimeException(e);
     }
   }
 
@@ -116,5 +118,9 @@ public class DictionaryFieldConverterImpl extends AbstractDictionaryFieldConvert
   @Override
   public void fillColumnCardinality(List<Integer> cardinality) {
     cardinality.add(dictionaryGenerator.size());
+  }
+
+  public DictionaryKey getDictionaryKey(){
+    return dictionaryKey;
   }
 }

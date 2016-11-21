@@ -188,6 +188,7 @@ public class GraphGenerator {
   private String quoteCharacter;
   private String commentCharacter;
   private String dateFormat;
+  private boolean useOnePass;
   /**
    * task id, each spark task has a unique id
    */
@@ -227,6 +228,7 @@ public class GraphGenerator {
     this.quoteCharacter = dataLoadModel.getQuoteCharacter();
     this.commentCharacter = dataLoadModel.getCommentCharacter();
     this.dateFormat = dataLoadModel.getDateFormat();
+    this.useOnePass = dataLoadModel.getUseOnePass();
     this.factTimeStamp = dataLoadModel.getFactTimeStamp();
     this.segmentId = segmentId;
     this.escapeCharacter = dataLoadModel.getEscapeCharacter();
@@ -573,6 +575,7 @@ public class GraphGenerator {
     seqMeta.setForgienKeyPrimayKeyString(graphConfiguration.getForgienKeyAndPrimaryKeyMapString());
     seqMeta.setTableName(graphConfiguration.getTableName());
     seqMeta.setDateFormat(dateFormat);
+    seqMeta.setUseOnePass(useOnePass);
     seqMeta.setModifiedDimension(modifiedDimension);
     seqMeta.setForeignKeyHierarchyString(graphConfiguration.getForeignKeyHierarchyString());
     seqMeta.setPrimaryKeysString(graphConfiguration.getPrimaryKeyString());

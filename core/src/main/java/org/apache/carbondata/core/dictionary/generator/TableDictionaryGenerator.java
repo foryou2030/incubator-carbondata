@@ -18,6 +18,7 @@
  */
 package org.apache.carbondata.core.dictionary.generator;
 
+import java.io.IOException;
 import java.util.List;
 import java.util.Map;
 import java.util.concurrent.ConcurrentHashMap;
@@ -46,24 +47,26 @@ public class TableDictionaryGenerator
       if (dimension.hasEncoding(Encoding.DICTIONARY) && !dimension
           .hasEncoding(Encoding.DIRECT_DICTIONARY)) {
         columnMap
-            .put(dimension.getColumnId(), new IncrementalColumnDictionaryGenerator(dimension, 0));
+            .put(dimension.getColumnId(), new IncrementalColumnDictionaryGenerator(dimension, 1));
       }
     }
   }
 
   @Override public Integer generateKey(DictionaryKey value) throws DictionaryGenerationException {
-    DictionaryGenerator<Integer, String> generator = columnMap.get(value.getColumnName());
+    DictionaryGenerator<Integer, String> generator =
+            columnMap.get(value.getColumnIdentifier().getColumnId());
     return generator.generateKey(value.getData().toString());
   }
 
   public Integer size(DictionaryKey key) {
-    DictionaryGenerator<Integer, String> generator = columnMap.get(key.getColumnName());
+    DictionaryGenerator<Integer, String> generator =
+            columnMap.get(key.getColumnIdentifier().getColumnId());
     return ((BiDictionary) generator).size();
   }
 
-  @Override public void writeDictionaryData() {
+  @Override public void writeDictionaryData(DictionaryKey key) throws IOException {
     for (DictionaryGenerator generator : columnMap.values()) {
-      ((DictionaryWriter) (generator)).writeDictionaryData();
+      ((DictionaryWriter) (generator)).writeDictionaryData(key);
     }
   }
 }

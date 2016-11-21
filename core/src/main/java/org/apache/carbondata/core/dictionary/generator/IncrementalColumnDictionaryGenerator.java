@@ -18,15 +18,34 @@
  */
 package org.apache.carbondata.core.dictionary.generator;
 
-import java.util.Map;
+import java.io.IOException;
+import java.util.*;
 import java.util.concurrent.ConcurrentHashMap;
 
 import org.apache.carbondata.common.factory.CarbonCommonFactory;
+import org.apache.carbondata.core.cache.Cache;
+import org.apache.carbondata.core.cache.CacheProvider;
+import org.apache.carbondata.core.cache.CacheType;
+import org.apache.carbondata.core.cache.dictionary.Dictionary;
+import org.apache.carbondata.core.cache.dictionary.DictionaryColumnUniqueIdentifier;
+import org.apache.carbondata.core.carbon.CarbonTableIdentifier;
+import org.apache.carbondata.core.carbon.ColumnIdentifier;
 import org.apache.carbondata.core.carbon.metadata.schema.table.column.CarbonDimension;
+import org.apache.carbondata.core.carbon.path.CarbonTablePath;
+import org.apache.carbondata.core.constants.CarbonCommonConstants;
 import org.apache.carbondata.core.devapi.BiDictionary;
 import org.apache.carbondata.core.devapi.DictionaryGenerationException;
 import org.apache.carbondata.core.devapi.DictionaryGenerator;
+import org.apache.carbondata.core.dictionary.generator.key.DictionaryKey;
 import org.apache.carbondata.core.service.DictionaryService;
+import org.apache.carbondata.core.service.PathService;
+import org.apache.carbondata.core.util.CarbonUtilException;
+import org.apache.carbondata.core.util.DataTypeUtil;
+import org.apache.carbondata.core.writer.CarbonDictionaryWriter;
+import org.apache.carbondata.core.writer.sortindex.CarbonDictionarySortIndexWriter;
+import org.apache.carbondata.core.writer.sortindex.CarbonDictionarySortInfo;
+import org.apache.carbondata.core.writer.sortindex.CarbonDictionarySortInfoPreparator;
+
 
 /**
  * This generator does not maintain the whole cache of dictionary. It just maintains the cache only
@@ -81,9 +100,87 @@ public class IncrementalColumnDictionaryGenerator
     }
   }
 
-  @Override public void writeDictionaryData() {
-    // TODO write data to file system.
+  @Override public void writeDictionaryData(DictionaryKey key) throws IOException {
+    // write data to file system
+    CarbonTableIdentifier tableIdentifier = key.getTableIdentifier();
+    ColumnIdentifier columnIdentifier = key.getColumnIdentifier();
+    String storePath = key.getStorePath();
+
     DictionaryService dictionaryService = CarbonCommonFactory.getDictionaryService();
-    // dictionaryService.getDictionaryWriter()
+    CarbonDictionaryWriter dictionaryWriter =
+            dictionaryService.getDictionaryWriter(tableIdentifier, columnIdentifier, storePath);
+
+    PathService pathService = CarbonCommonFactory.getPathService();
+    CarbonTablePath carbonTablePath = pathService.getCarbonTablePath(storePath, tableIdentifier);
+
+    CacheProvider cacheProvider = CacheProvider.getInstance();
+    Cache<DictionaryColumnUniqueIdentifier, Dictionary> cache =
+            cacheProvider.createCache(CacheType.REVERSE_DICTIONARY, carbonTablePath.getTableStatusFilePath());
+    DictionaryColumnUniqueIdentifier identifier =
+            new DictionaryColumnUniqueIdentifier(tableIdentifier, columnIdentifier, columnIdentifier.getDataType());
+    Dictionary dictionary = null;
+    try {
+      dictionary = cache.get(identifier);
+    } catch (CarbonUtilException e) {
+      System.out.println("Didn't find dictionary from cache! ");
+      dictionary = null;
+    }
+
+    List<String> distinctValues = new ArrayList<>();
+    // write dictionary
+    try {
+      //TODO: isFileExists replace dictionaryIsNull
+      if (dictionary == null) {
+        dictionaryWriter.write(CarbonCommonConstants.MEMBER_DEFAULT_VAL);
+        distinctValues.add(CarbonCommonConstants.MEMBER_DEFAULT_VAL);
+      }
+      if (incrementalCache.size() > 1) {
+        // TODO: map need sort first
+        for (String value : incrementalCache.keySet()) {
+          String parsedValue = DataTypeUtil
+                  .normalizeColumnValueForItsDataType(value, dimension);
+          if (null != parsedValue) {
+            if (dictionary == null) {
+              dictionaryWriter.write(parsedValue);
+              distinctValues.add(parsedValue);
+            } else {
+              if (dictionary.getSurrogateKey(parsedValue) ==
+                      CarbonCommonConstants.INVALID_SURROGATE_KEY) {
+                dictionaryWriter.write(parsedValue);
+                distinctValues.add(parsedValue);
+              }
+            }
+          }
+        }
+      }
+    } catch (IOException ex) {
+      throw ex;
+    } finally {
+      if (null != dictionaryWriter) {
+        dictionaryWriter.close();
+      }
+    }
+    // write sort index
+    CarbonDictionarySortIndexWriter carbonDictionarySortIndexWriter = null;
+    try {
+      if (distinctValues.size() > 0) {
+        CarbonDictionarySortInfoPreparator preparator = new CarbonDictionarySortInfoPreparator();
+        CarbonDictionarySortInfo dictionarySortInfo =
+                preparator.getDictionarySortInfo(distinctValues, dictionary,
+                        dimension.getDataType());
+        carbonDictionarySortIndexWriter =
+                dictionaryService.getDictionarySortIndexWriter(tableIdentifier, columnIdentifier,
+                        storePath);
+        carbonDictionarySortIndexWriter.writeSortIndex(dictionarySortInfo.getSortIndex());
+        carbonDictionarySortIndexWriter
+                .writeInvertedSortIndex(dictionarySortInfo.getSortIndexInverted());
+      }
+    } catch (CarbonUtilException e) {
+      e.printStackTrace();
+    } finally {
+      if (null != carbonDictionarySortIndexWriter) {
+        carbonDictionarySortIndexWriter.close();
+      }
+    }
   }
 }

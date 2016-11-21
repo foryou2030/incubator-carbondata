@@ -18,7 +18,6 @@
  */
 package org.apache.carbondata.core.dictionary.client;
 
-import java.net.SocketAddress;
 import java.util.concurrent.BlockingQueue;
 import java.util.concurrent.LinkedBlockingQueue;
 
@@ -31,7 +30,7 @@ import org.jboss.netty.channel.*;
  */
 public class DictionaryClientHandler extends SimpleChannelHandler {
 
-  final BlockingQueue<DictionaryKey> answer = new LinkedBlockingQueue<DictionaryKey>();
+  final BlockingQueue<DictionaryKey> dictKeyQueue = new LinkedBlockingQueue<DictionaryKey>();
   private ChannelHandlerContext ctx;
 
   @Override
@@ -44,16 +43,16 @@ public class DictionaryClientHandler extends SimpleChannelHandler {
   @Override
   public void messageReceived(ChannelHandlerContext ctx, MessageEvent e) throws Exception {
     DictionaryKey key = (DictionaryKey) e.getMessage();
-    System.out.println("Received new Dictionary Key!");
-    answer.offer(key);
+    System.out.println(key.getData());
+    dictKeyQueue.offer(key);
     super.messageReceived(ctx, e);
   }
 
-//  @Override
-//  public void exceptionCaught(ChannelHandlerContext ctx, ExceptionEvent e) throws Exception {
-//    System.out.println("exceptionCaught");
-//    ctx.getChannel().close();
-//  }
+  @Override
+  public void exceptionCaught(ChannelHandlerContext ctx, ExceptionEvent e) throws Exception {
+    System.out.println("exceptionCaught");
+    ctx.getChannel().close();
+  }
 
   @Override
   public void channelDisconnected(ChannelHandlerContext ctx, ChannelStateEvent e) throws Exception {
@@ -78,7 +77,7 @@ public class DictionaryClientHandler extends SimpleChannelHandler {
     try {
       for (; ; ) {
         try {
-          dictionaryKey = answer.take();
+          dictionaryKey = dictKeyQueue.take();
           return dictionaryKey;
         } catch (InterruptedException ignore) {
           interrupted = true;

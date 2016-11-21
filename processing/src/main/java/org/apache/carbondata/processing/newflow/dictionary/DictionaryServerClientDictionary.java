@@ -51,22 +51,20 @@ public class DictionaryServerClientDictionary implements BiDictionary<Integer, O
 
   @Override public Integer getOrGenerateKey(Object value) throws DictionaryGenerationException {
     Integer key = getKey(value);
-    if (key == 0) {
-      if (((DictionaryKey) value).getMessageType() == MESSAGETYPE.DICTIONARY_GENERATION) {
+    if (key == null) {
         dictionaryKey.setData(value);
-        dictionaryKey.setMessage(MESSAGETYPE.DICTIONARY_GENERATION);
-      }
       DictionaryKey dictionaryValue = client.getDictionary(dictionaryKey);
       key = (Integer) dictionaryValue.getData();
       synchronized (localCache) {
         localCache.put(value, key);
       }
-    } return key;
+    }
+    return key + dictionary.getDictionaryChunks().getSize();
   }
 
   @Override public Integer getKey(Object value) {
-    int key = dictionary.getSurrogateKey(value.toString());
-    if (key == CarbonCommonConstants.INVALID_SURROGATE_KEY) {
+    Integer key = dictionary.getSurrogateKey(value.toString());
+    if (key == CarbonCommonConstants.NOT_FOUND_SURROGATE_KEY ) {
       key = localCache.get(value);
     }
     return key;
@@ -77,7 +75,9 @@ public class DictionaryServerClientDictionary implements BiDictionary<Integer, O
   }
 
   @Override public int size() {
-    // TODO implement it
-    return 0;
+    dictionaryKey.setMessage(MESSAGETYPE.SIZE);
+    int size = (int) client.getDictionary(dictionaryKey).getData()
+            + dictionary.getDictionaryChunks().getSize();
+    return size;
   }
 }

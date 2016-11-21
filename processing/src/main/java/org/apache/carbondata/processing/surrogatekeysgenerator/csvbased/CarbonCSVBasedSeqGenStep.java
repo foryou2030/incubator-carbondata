@@ -267,10 +267,17 @@ public class CarbonCSVBasedSeqGenStep extends BaseStep {
   private GenericDataType[] complexTypes;
 
   private DirectDictionaryGenerator[] directDictionaryGenerators;
+
   /**
    * dimension column ids
    */
   private String[] dimensionColumnIds;
+
+  /**
+   * use one pass load
+   */
+  private boolean useOnePass;
+
   /**
    * Constructor
    *
@@ -295,6 +302,8 @@ public class CarbonCSVBasedSeqGenStep extends BaseStep {
       meta = (CarbonCSVBasedSeqGenMeta) smi;
       StandardLogService.setThreadName(meta.getPartitionID(), null);
       data = (CarbonCSVBasedSeqGenData) sdi;
+
+      // Todo: one pass
 
       Object[] r = getRow();  // get row, blocks when needed!
       if (first) {

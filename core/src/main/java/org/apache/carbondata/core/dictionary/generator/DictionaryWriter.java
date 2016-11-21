@@ -18,11 +18,15 @@
  */
 package org.apache.carbondata.core.dictionary.generator;
 
+import org.apache.carbondata.core.dictionary.generator.key.DictionaryKey;
+
+import java.io.IOException;
+
 /**
  * Interface to write dictionary to file system
  */
 public interface DictionaryWriter {
 
-  void writeDictionaryData();
+  void writeDictionaryData(DictionaryKey key) throws IOException;
 
 }

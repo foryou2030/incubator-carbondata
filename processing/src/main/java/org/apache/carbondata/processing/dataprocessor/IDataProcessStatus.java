@@ -197,4 +197,6 @@ public interface IDataProcessStatus {
   String getRddIteratorKey();
 
   String getDateFormat();
+
+  boolean getUseOnePass();
 }

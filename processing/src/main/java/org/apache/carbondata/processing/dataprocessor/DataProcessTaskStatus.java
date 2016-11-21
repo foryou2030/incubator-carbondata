@@ -95,6 +95,8 @@ public class DataProcessTaskStatus implements IDataProcessStatus, Serializable {
 
   private String dateFormat;
 
+  private boolean useOnePass;
+
   public DataProcessTaskStatus(String databaseName, String tableName) {
     this.databaseName = databaseName;
     this.tableName = tableName;
@@ -313,4 +315,8 @@ public class DataProcessTaskStatus implements IDataProcessStatus, Serializable {
   public String getDateFormat() { return dateFormat; }
 
   public void setDateFormat(String dateFormat) { this.dateFormat = dateFormat; }
+
+  public boolean getUseOnePass() { return useOnePass; }
+
+  public void setUseOnePass(boolean useOnePass) { this.useOnePass = useOnePass; }
 }

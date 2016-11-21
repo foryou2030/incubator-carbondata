@@ -161,6 +161,12 @@ public final class DataLoadProcessBuilder {
       }
     }
     configuration.setDataFields(dataFields.toArray(new DataField[dataFields.size()]));
+    // configuration for one pass load: dictionary server info
+    configuration.setUseOnePass(loadModel.getUseOnePass());
+    configuration.setDictionaryServerHost(loadModel.getDictionaryServerHost());
+    configuration.setDictionaryServerPort(loadModel.getDictionaryServerPort());
+    configuration.setCarbonStorePath(loadModel.getStorePath());
+
     return configuration;
   }
 

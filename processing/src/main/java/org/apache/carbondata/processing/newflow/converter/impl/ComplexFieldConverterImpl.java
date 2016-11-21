@@ -57,4 +57,5 @@ public class ComplexFieldConverterImpl extends AbstractDictionaryFieldConverterI
   @Override public void fillColumnCardinality(List<Integer> cardinality) {
     genericDataType.fillCardinality(cardinality);
   }
+
 }

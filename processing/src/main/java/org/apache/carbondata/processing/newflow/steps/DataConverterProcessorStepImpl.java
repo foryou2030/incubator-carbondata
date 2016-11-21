@@ -50,17 +50,24 @@ public class DataConverterProcessorStepImpl extends AbstractDataLoadProcessorSte
 
   private RowConverter converter;
 
+  private int dictionaryServerPort;
+
   public DataConverterProcessorStepImpl(CarbonDataLoadConfiguration configuration,
       AbstractDataLoadProcessorStep child) {
     super(configuration, child);
-    ExecutorService executorService = Executors.newFixedThreadPool(1);
-    executorService.submit(new Callable<DictionaryServer>() {
-      @Override public DictionaryServer call() throws Exception {
-        DictionaryServer server = new DictionaryServer();
-        server.startServer(1118);
-        return server;
-      }
-    });
+    // start dictionary server when use one pass load.
+    dictionaryServerPort = configuration.getDictionaryServerPort();
+    if (configuration.getUseOnePass()) {
+      ExecutorService executorService = Executors.newFixedThreadPool(1);
+      executorService.submit(new Callable<DictionaryServer>() {
+        @Override
+        public DictionaryServer call() throws Exception {
+          DictionaryServer server = new DictionaryServer();
+          server.startServer(dictionaryServerPort);
+          return server;
+        }
+      });
+    }
   }
 
   @Override

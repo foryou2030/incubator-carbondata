@@ -70,6 +70,8 @@ public class DataLoadModel {
   private String dateFormat;
 
   private String maxColumns;
+
+  private boolean useOnePass;
   /**
    * @return Returns the schemaInfo.
    */
@@ -242,5 +244,9 @@ public class DataLoadModel {
   public void setRddIteratorKey(String rddIteratorKey) {
     this.rddIteratorKey = rddIteratorKey;
   }
+
+  public boolean getUseOnePass() { return useOnePass; }
+
+  public void setUseOnePass(boolean useOnePass) { this.useOnePass = useOnePass; }
 }
 

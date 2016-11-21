@@ -22,7 +22,7 @@ package org.apache.carbondata.core.dictionary.generator.key;
  * Message types received by dictionary server.
  */
 public enum MESSAGETYPE {
-  DICTIONARY_GENERATION(1), TABLE_INTIALIZATION(2), SIZE(3), WRITE_DICTIONARY(4);
+  DICTIONARY_GENERATION(1), TABLE_INITIALIZATION(2), SIZE(3), WRITE_DICTIONARY(4);
 
   int type;
 
