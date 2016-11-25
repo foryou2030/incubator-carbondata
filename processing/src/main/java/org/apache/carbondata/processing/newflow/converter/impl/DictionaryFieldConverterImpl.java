@@ -120,7 +120,6 @@ public class DictionaryFieldConverterImpl extends AbstractDictionaryFieldConvert
     cardinality.add(dictionaryGenerator.size());
   }
 
-  @Override
   public DictionaryKey getDictionaryKey() {
     return dictionaryKey;
   }

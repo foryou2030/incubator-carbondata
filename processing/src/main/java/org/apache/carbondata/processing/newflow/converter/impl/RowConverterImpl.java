@@ -31,12 +31,15 @@ import org.apache.carbondata.core.dictionary.client.DictionaryClient;
 import org.apache.carbondata.core.dictionary.generator.key.DictionaryKey;
 import org.apache.carbondata.core.dictionary.generator.key.MESSAGETYPE;
 import org.apache.carbondata.core.util.CarbonTimeStatisticsFactory;
+import org.apache.carbondata.processing.datatypes.GenericDataType;
+import org.apache.carbondata.processing.datatypes.PrimitiveDataType;
 import org.apache.carbondata.processing.newflow.CarbonDataLoadConfiguration;
 import org.apache.carbondata.processing.newflow.DataField;
 import org.apache.carbondata.processing.newflow.constants.DataLoadProcessorConstants;
 import org.apache.carbondata.processing.newflow.converter.BadRecordLogHolder;
 import org.apache.carbondata.processing.newflow.converter.FieldConverter;
 import org.apache.carbondata.processing.newflow.converter.RowConverter;
+import org.apache.carbondata.processing.newflow.dictionary.DirectDictionary;
 import org.apache.carbondata.processing.newflow.exception.CarbonDataLoadingException;
 import org.apache.carbondata.processing.newflow.row.CarbonRow;
 import org.apache.carbondata.processing.surrogatekeysgenerator.csvbased.BadRecordsLogger;
@@ -147,12 +150,23 @@ public class RowConverterImpl implements RowConverter {
 
         // for one pass load, finally write dictionary to file
         if (configuration.getUseOnePass()) {
-          if (fieldConverters[i] instanceof DictionaryFieldConverterImpl ||
-                  fieldConverters[i] instanceof ComplexFieldConverterImpl) {
+          if (fieldConverters[i] instanceof DictionaryFieldConverterImpl) {
             DictionaryKey dictionaryKey =
-                    ((AbstractDictionaryFieldConverterImpl) fieldConverters[i]).getDictionaryKey();
+                    ((DictionaryFieldConverterImpl) fieldConverters[i]).getDictionaryKey();
             dictionaryKey.setMessage(MESSAGETYPE.WRITE_DICTIONARY);
             dictClient.getDictionary(dictionaryKey);
+          } else if (fieldConverters[i] instanceof ComplexFieldConverterImpl){
+            List<GenericDataType> primitiveChild = new ArrayList<GenericDataType>();
+            ((ComplexFieldConverterImpl) fieldConverters[i]).getGenericDataType()
+                    .getAllPrimitiveChildren(primitiveChild);
+            for (GenericDataType child: primitiveChild) {
+              if (false == ((PrimitiveDataType) child)
+                      .getDictionaryGenerator() instanceof DirectDictionary) {
+                DictionaryKey dictionaryKey = ((PrimitiveDataType) child).getDictionaryKey();
+                dictionaryKey.setMessage(MESSAGETYPE.WRITE_DICTIONARY);
+                dictClient.getDictionary(dictionaryKey);
+              }
+            }
           }
         }
       }

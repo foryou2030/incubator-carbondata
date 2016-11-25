@@ -27,7 +27,6 @@ import java.util.List;
 
 import org.apache.carbondata.core.constants.CarbonCommonConstants;
 import org.apache.carbondata.core.devapi.DictionaryGenerationException;
-import org.apache.carbondata.core.dictionary.generator.key.DictionaryKey;
 import org.apache.carbondata.core.keygenerator.KeyGenException;
 import org.apache.carbondata.core.keygenerator.KeyGenerator;
 import org.apache.carbondata.processing.newflow.complexobjects.StructObject;
@@ -348,8 +347,4 @@ public class StructDataType implements GenericDataType<StructObject> {
     }
   }
 
-  @Override
-  public DictionaryKey getDictionaryKey() {
-    return children.get(children_position++).getDictionaryKey();
-  }
 }

@@ -366,8 +366,11 @@ public class PrimitiveDataType implements GenericDataType<Object> {
     dimCardWithComplex.add(maxSurrogateKeyArray[index]);
   }
 
-  @Override
   public DictionaryKey getDictionaryKey() {
     return this.dictionaryKey;
+  }
+
+  public BiDictionary<Integer, Object> getDictionaryGenerator() {
+    return dictionaryGenerator;
   }
 }

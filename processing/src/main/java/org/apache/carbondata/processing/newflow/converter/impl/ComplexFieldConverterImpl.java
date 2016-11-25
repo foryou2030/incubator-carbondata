@@ -23,7 +23,6 @@ import java.io.ByteArrayOutputStream;
 import java.io.DataOutputStream;
 import java.util.List;
 
-import org.apache.carbondata.core.dictionary.generator.key.DictionaryKey;
 import org.apache.carbondata.processing.datatypes.GenericDataType;
 import org.apache.carbondata.processing.newflow.converter.BadRecordLogHolder;
 import org.apache.carbondata.processing.newflow.exception.CarbonDataLoadingException;
@@ -59,8 +58,8 @@ public class ComplexFieldConverterImpl extends AbstractDictionaryFieldConverterI
     genericDataType.fillCardinality(cardinality);
   }
 
-  @Override
-  public DictionaryKey getDictionaryKey() {
-    return this.genericDataType.getDictionaryKey();
+  public GenericDataType getGenericDataType() {
+    return genericDataType;
   }
+
 }
