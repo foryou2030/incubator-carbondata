@@ -20,7 +20,6 @@ package org.apache.carbondata.core.dictionary.generator;
 
 import java.io.IOException;
 import java.util.*;
-import java.util.concurrent.ConcurrentHashMap;
 
 import org.apache.carbondata.common.factory.CarbonCommonFactory;
 import org.apache.carbondata.core.cache.Cache;
@@ -61,18 +60,18 @@ public class IncrementalColumnDictionaryGenerator
 
   private final Object lock = new Object();
 
-  private Map<String, Integer> incrementalCache = new ConcurrentHashMap<>();
+  private Map<String, Integer> incrementalCache = new HashMap<>();
 
-  private Map<Integer, String> reverseIncrementalCache = new ConcurrentHashMap<>();
+  private Map<Integer, String> reverseIncrementalCache = new HashMap<>();
 
-  private int maxDictionary;
+  private int currentDictionarySize;
 
   private CarbonDimension dimension;
 
   private CarbonDictionaryWriter dictionaryWriter = null;
 
   public IncrementalColumnDictionaryGenerator(CarbonDimension dimension, int maxValue) {
-    this.maxDictionary = maxValue;
+    this.currentDictionarySize = maxValue;
     this.dimension = dimension;
   }
 
@@ -89,18 +88,18 @@ public class IncrementalColumnDictionaryGenerator
   }
 
   @Override public String getValue(Integer key) {
-    throw new UnsupportedOperationException();
+    return reverseIncrementalCache.get(key);
   }
 
   @Override public int size() {
-    return maxDictionary;
+    return currentDictionarySize;
   }
 
   @Override public Integer generateKey(String value) throws DictionaryGenerationException {
     synchronized (lock) {
       Integer dict = incrementalCache.get(value);
       if (dict == null) {
-        dict = ++maxDictionary;
+        dict = ++currentDictionarySize;
         incrementalCache.put(value, dict);
         reverseIncrementalCache.put(dict, value);
       }
@@ -165,27 +164,14 @@ public class IncrementalColumnDictionaryGenerator
         distinctValues.add(CarbonCommonConstants.MEMBER_DEFAULT_VAL);
       }
       // write value to dictionary file
-      if (reverseIncrementalCache.size() >= 1) {
-        if (isDictExists) {
-          for (int i = 2; i < reverseIncrementalCache.size() + 2; i++) {
-            String value = reverseIncrementalCache.get(i);
-            String parsedValue = DataTypeUtil
-                    .normalizeColumnValueForItsDataType(value, dimension);
-            if (null != parsedValue && dictionary.getSurrogateKey(parsedValue) ==
-                    CarbonCommonConstants.INVALID_SURROGATE_KEY) {
-              dictionaryWriter.write(parsedValue);
-              distinctValues.add(parsedValue);
-            }
-          }
-        } else {
-          for (int i = 2; i < reverseIncrementalCache.size() + 2; i++) {
-            String value = reverseIncrementalCache.get(i);
-            String parsedValue = DataTypeUtil
-                    .normalizeColumnValueForItsDataType(value, dimension);
-            if (null != parsedValue) {
-              dictionaryWriter.write(parsedValue);
-              distinctValues.add(parsedValue);
-            }
+      if (reverseIncrementalCache.size() > 0) {
+        for (int i = 2; i < reverseIncrementalCache.size() + 2; i++) {
+          String value = reverseIncrementalCache.get(i);
+          String parsedValue = DataTypeUtil
+                  .normalizeColumnValueForItsDataType(value, dimension);
+          if (null != parsedValue) {
+            dictionaryWriter.write(parsedValue);
+            distinctValues.add(parsedValue);
           }
         }
       }
