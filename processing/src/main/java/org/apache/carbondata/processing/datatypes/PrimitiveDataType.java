@@ -129,7 +129,7 @@ public class PrimitiveDataType implements GenericDataType<Object> {
                            CarbonDimension carbonDimension,
                            Cache<DictionaryColumnUniqueIdentifier, Dictionary> cache,
                            CarbonTableIdentifier carbonTableIdentifier,
-                           DictionaryClient client, String storePath, Boolean useOnePass) {
+                           DictionaryClient client, Boolean useOnePass) {
     this.name = name;
     this.parentname = parentname;
     this.columnId = columnId;
@@ -151,8 +151,9 @@ public class PrimitiveDataType implements GenericDataType<Object> {
             dictionary = new ForwardDictionary(
                     new ColumnDictionaryInfo(carbonDimension.getDataType()));
           }
+          String threadNo = "initialize_thread_no";
           dictionaryKey = new DictionaryKey(carbonTableIdentifier.getTableUniqueName(),
-                  carbonDimension.getColName(), null, null);
+                  carbonDimension.getColName(), null, null, threadNo);
           // for table initialization
           dictionaryKey.setMessage(MESSAGETYPE.TABLE_INITIALIZATION);
           client.getDictionary(dictionaryKey);

@@ -805,7 +805,8 @@ case class LoadTable(
           throw new MalformedCarbonCommandException(errorMessage)
       }
       val maxColumns = options.getOrElse("maxcolumns", null)
-      val useOnePass = options.getOrElse("useonepass", "true")
+//      val useOnePass = options.getOrElse("useonepass", "true")
+      val useOnePass = "false"
       carbonLoadModel.setMaxColumns(maxColumns)
       carbonLoadModel.setEscapeChar(escapeChar)
       carbonLoadModel.setQuoteChar(quoteChar)

@@ -116,7 +116,7 @@ public class RowConverterImpl implements RowConverter {
       FieldConverter fieldConverter = FieldEncoderFactory.getInstance()
           .createFieldEncoder(fields[i], cache,
               configuration.getTableIdentifier().getCarbonTableIdentifier(), i, nullFormat,
-              dictClient, configuration.getCarbonStorePath(), configuration.getUseOnePass());
+              dictClient, configuration.getUseOnePass());
       fieldConverterList.add(fieldConverter);
     }
     CarbonTimeStatisticsFactory.getLoadStatisticsInstance()

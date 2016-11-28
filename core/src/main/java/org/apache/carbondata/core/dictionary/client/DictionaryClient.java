@@ -74,6 +74,7 @@ public class DictionaryClient {
    * @return
    */
   public DictionaryKey getDictionary(DictionaryKey key) {
+
     return dictionaryClientHandler.getDictionary(key);
   }
 

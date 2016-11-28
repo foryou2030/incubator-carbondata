@@ -62,7 +62,7 @@ public class DictionaryFieldConverterImpl extends AbstractDictionaryFieldConvert
   public DictionaryFieldConverterImpl(DataField dataField,
       Cache<DictionaryColumnUniqueIdentifier, Dictionary> cache,
       CarbonTableIdentifier carbonTableIdentifier, String nullFormat, int index,
-      DictionaryClient client, String storePath, Boolean useOnePass) {
+      DictionaryClient client, Boolean useOnePass) {
     this.index = index;
     this.carbonDimension = (CarbonDimension) dataField.getColumn();
     this.nullFormat = nullFormat;
@@ -80,8 +80,9 @@ public class DictionaryFieldConverterImpl extends AbstractDictionaryFieldConvert
         dictionary = new ForwardDictionary(
                 new ColumnDictionaryInfo(dataField.getColumn().getDataType()));
       }
+      String threadNo = "initialize_thread_no";
       dictionaryKey = new DictionaryKey(carbonTableIdentifier.getTableUniqueName(),
-          carbonDimension.getColName(), null, null);
+          carbonDimension.getColName(), null, null, threadNo);
       // for table initialization
       dictionaryKey.setMessage(MESSAGETYPE.TABLE_INITIALIZATION);
       client.getDictionary(dictionaryKey);

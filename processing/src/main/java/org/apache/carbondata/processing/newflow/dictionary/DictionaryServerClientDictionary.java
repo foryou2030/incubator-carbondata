@@ -41,7 +41,7 @@ public class DictionaryServerClientDictionary implements BiDictionary<Integer, O
 
   private DictionaryKey dictionaryKey;
 
-  private final Object lock = new Object();
+  private Object lock = new Object();
 
   public DictionaryServerClientDictionary(Dictionary dictionary, DictionaryClient client,
       DictionaryKey key, Map<Object, Integer> localCache) {
@@ -56,6 +56,7 @@ public class DictionaryServerClientDictionary implements BiDictionary<Integer, O
     if (key == null) {
       synchronized (lock) {
         dictionaryKey.setData(value);
+        dictionaryKey.setThreadNo(Thread.currentThread().getId() + "");
         DictionaryKey dictionaryValue = client.getDictionary(dictionaryKey);
         key = (Integer) dictionaryValue.getData();
         localCache.put(value, key);

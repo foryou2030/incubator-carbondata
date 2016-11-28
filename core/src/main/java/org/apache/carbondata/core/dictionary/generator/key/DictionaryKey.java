@@ -33,12 +33,15 @@ public class DictionaryKey implements Serializable {
 
   private MESSAGETYPE type;
 
+  private String threadNo;
+
   public DictionaryKey(String tableUniqueName, String columnName,
-                       String data, MESSAGETYPE messagetype) {
+                       String data, MESSAGETYPE messagetype, String threadNo) {
     this.tableUniqueName = tableUniqueName;
     this.columnName = columnName;
     this.data = data;
     this.type = messagetype;
+    this.threadNo = threadNo;
   }
 
   public String getTableUniqueName() {
@@ -63,6 +66,14 @@ public class DictionaryKey implements Serializable {
 
   public MESSAGETYPE getMessageType() {
     return type;
+  }
+
+  public void setThreadNo(String threadNo) {
+    this.threadNo = threadNo;
+  }
+
+  public String getThreadNo() {
+    return this.threadNo;
   }
 
 }

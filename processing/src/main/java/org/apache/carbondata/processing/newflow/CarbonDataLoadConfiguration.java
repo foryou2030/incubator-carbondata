@@ -53,11 +53,6 @@ public class CarbonDataLoadConfiguration {
    */
   private int dictionaryServerPort;
 
-  /**
-   * carbon store path
-   */
-  private String carbonStorePath;
-
   public CarbonDataLoadConfiguration() {
   }
 
@@ -189,11 +184,4 @@ public class CarbonDataLoadConfiguration {
     this.dictionaryServerPort = dictionaryServerPort;
   }
 
-  public String getCarbonStorePath() {
-    return carbonStorePath;
-  }
-
-  public void setCarbonStorePath(String carbonStorePath) {
-    this.carbonStorePath = carbonStorePath;
-  }
 }

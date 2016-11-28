@@ -18,7 +18,9 @@
  */
 package org.apache.carbondata.core.dictionary.client;
 
+import java.util.Map;
 import java.util.concurrent.BlockingQueue;
+import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.LinkedBlockingQueue;
 
 import org.apache.carbondata.core.dictionary.generator.key.DictionaryKey;
@@ -30,8 +32,11 @@ import org.jboss.netty.channel.*;
  */
 public class DictionaryClientHandler extends SimpleChannelHandler {
 
-  final BlockingQueue<DictionaryKey> dictKeyQueue = new LinkedBlockingQueue<DictionaryKey>();
+  final Map<String, BlockingQueue<DictionaryKey>> dictKeyQueueMap = new ConcurrentHashMap<>();
+
   private ChannelHandlerContext ctx;
+
+  private Object lock = new Object();
 
   @Override
   public void channelConnected(ChannelHandlerContext ctx, ChannelStateEvent e) throws Exception {
@@ -43,6 +48,7 @@ public class DictionaryClientHandler extends SimpleChannelHandler {
   @Override
   public void messageReceived(ChannelHandlerContext ctx, MessageEvent e) throws Exception {
     DictionaryKey key = (DictionaryKey) e.getMessage();
+    BlockingQueue<DictionaryKey> dictKeyQueue = dictKeyQueueMap.get(key.getThreadNo());
     dictKeyQueue.offer(key);
     super.messageReceived(ctx, e);
   }
@@ -61,7 +67,15 @@ public class DictionaryClientHandler extends SimpleChannelHandler {
    */
   public DictionaryKey getDictionary(DictionaryKey key) {
     DictionaryKey dictionaryKey;
+    BlockingQueue<DictionaryKey> dictKeyQueue = null;
     try {
+      synchronized (lock) {
+        dictKeyQueue = dictKeyQueueMap.get(key.getThreadNo());
+        if (dictKeyQueue == null) {
+          dictKeyQueue = new LinkedBlockingQueue<DictionaryKey>();
+          dictKeyQueueMap.put(key.getThreadNo(), dictKeyQueue);
+        }
+      }
       ctx.getChannel().write(key);
     } catch (Exception e) {
       e.printStackTrace();

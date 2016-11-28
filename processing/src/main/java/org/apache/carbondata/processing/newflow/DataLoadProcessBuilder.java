@@ -171,7 +171,6 @@ public final class DataLoadProcessBuilder {
     configuration.setUseOnePass(loadModel.getUseOnePass());
     configuration.setDictionaryServerHost(loadModel.getDictionaryServerHost());
     configuration.setDictionaryServerPort(loadModel.getDictionaryServerPort());
-    configuration.setCarbonStorePath(loadModel.getStorePath());
 
     return configuration;
   }
