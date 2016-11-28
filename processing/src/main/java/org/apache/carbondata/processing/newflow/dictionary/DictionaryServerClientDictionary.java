@@ -41,6 +41,8 @@ public class DictionaryServerClientDictionary implements BiDictionary<Integer, O
 
   private DictionaryKey dictionaryKey;
 
+  private final Object lock = new Object();
+
   public DictionaryServerClientDictionary(Dictionary dictionary, DictionaryClient client,
       DictionaryKey key, Map<Object, Integer> localCache) {
     this.dictionary = dictionary;
@@ -52,10 +54,10 @@ public class DictionaryServerClientDictionary implements BiDictionary<Integer, O
   @Override public Integer getOrGenerateKey(Object value) throws DictionaryGenerationException {
     Integer key = getKey(value);
     if (key == null) {
-      dictionaryKey.setData(value);
-      DictionaryKey dictionaryValue = client.getDictionary(dictionaryKey);
-      key = (Integer) dictionaryValue.getData();
-      synchronized (localCache) {
+      synchronized (lock) {
+        dictionaryKey.setData(value);
+        DictionaryKey dictionaryValue = client.getDictionary(dictionaryKey);
+        key = (Integer) dictionaryValue.getData();
         localCache.put(value, key);
       }
       int size = dictionary.getDictionaryChunks().getSize();

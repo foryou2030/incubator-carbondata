@@ -90,6 +90,7 @@ public class RowConverterImpl implements RowConverter {
       Future<DictionaryClient> result = executorService.submit(new Callable<DictionaryClient>() {
         @Override
         public DictionaryClient call() throws Exception {
+          Thread.currentThread().setName("Dictionary client");
           DictionaryClient dictionaryClient = new DictionaryClient();
           dictionaryClient.startClient(configuration.getDictionaryServerHost(),
                   configuration.getDictionaryServerPort());

@@ -30,6 +30,7 @@ import scala.collection.JavaConverters._
 import scala.collection.mutable.{ArrayBuffer, Map}
 import scala.language.implicitConversions
 
+import org.apache.commons.lang3.StringUtils
 import org.apache.spark.SparkEnv
 import org.apache.spark.sql._
 import org.apache.spark.sql.catalyst.TableIdentifier
@@ -819,7 +820,12 @@ case class LoadTable(
       carbonLoadModel
         .setBadRecordsAction(
           TableOptionConstant.BAD_RECORDS_ACTION.getName + "," + badRecordsLoggerRedirect)
-      carbonLoadModel.setUseOnePass(useOnePass.toBoolean)
+      // use one pass, and data frame is not defined, and not use column dict, and not use all dict
+      val actualUseOnePass = (useOnePass.toBoolean) &&
+                              (!dataFrame.isDefined) &&
+                              (columnDict == null) &&
+                              (StringUtils.isEmpty(allDictionaryPath))
+      carbonLoadModel.setUseOnePass(actualUseOnePass)
 
       if (delimiter.equalsIgnoreCase(complex_delimiter_level_1) ||
           complex_delimiter_level_1.equalsIgnoreCase(complex_delimiter_level_2) ||
@@ -850,8 +856,7 @@ case class LoadTable(
           carbonLoadModel.setDirectLoad(true)
         }
 
-        // when use one pass, and data frame is not defined
-        if (carbonLoadModel.getUseOnePass && !dataFrame.isDefined) {
+        if (carbonLoadModel.getUseOnePass) {
           val dictionaryServerPort = CarbonProperties.getInstance()
             .getProperty(CarbonCommonConstants.DICTIONARY_SERVER_PORT,
               CarbonCommonConstants.DICTIONARY_SERVER_PORT_DEFAULT);
@@ -861,6 +866,7 @@ case class LoadTable(
           // start dictionary server when use one pass load.
           executorService = Executors.newFixedThreadPool(1)
           result = executorService.submit(new Callable[DictionaryServer]() {
+            Thread.currentThread().setName("Dictionary server")
             @throws[Exception]
             def call: DictionaryServer = {
               val server: DictionaryServer = new DictionaryServer
@@ -892,7 +898,7 @@ case class LoadTable(
         // Once the data load is successful delete the unwanted partition files
         try {
           // shutdown dictionary server
-          if (carbonLoadModel.getUseOnePass && !dataFrame.isDefined) {
+          if (carbonLoadModel.getUseOnePass) {
             result.get().shutdown()
             executorService.shutdownNow()
           }
