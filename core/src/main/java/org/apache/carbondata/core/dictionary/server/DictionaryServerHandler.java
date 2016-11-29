@@ -21,6 +21,8 @@ package org.apache.carbondata.core.dictionary.server;
 import org.apache.carbondata.core.dictionary.generator.DictionaryGeneratorForServer;
 import org.apache.carbondata.core.dictionary.generator.key.DictionaryKey;
 
+import com.alibaba.fastjson.JSON;
+
 import org.jboss.netty.channel.*;
 
 
@@ -37,11 +39,13 @@ public class DictionaryServerHandler extends SimpleChannelHandler {
 
   @Override public void messageReceived(ChannelHandlerContext ctx, MessageEvent e)
       throws Exception {
-    DictionaryKey key = (DictionaryKey) e.getMessage();
+    String keyString = (String) e.getMessage();
+    DictionaryKey key = JSON.parseObject(keyString, DictionaryKey.class);
     int outPut = processMessage(key);
     key.setData(outPut);
     // Send back the response
-    ctx.getChannel().write(key);
+    String backkeyString = JSON.toJSONString(key);
+    ctx.getChannel().write(backkeyString);
     super.messageReceived(ctx, e);
   }
 
@@ -52,15 +56,15 @@ public class DictionaryServerHandler extends SimpleChannelHandler {
   }
 
   public Integer processMessage(DictionaryKey key) throws Exception {
-    switch (key.getMessageType()) {
-      case DICTIONARY_GENERATION:
+    switch (key.getType()) {
+      case "DICTIONARY_GENERATION":
         return generatorForServer.generateKey(key);
-      case TABLE_INITIALIZATION:
+      case "TABLE_INITIALIZATION":
         generatorForServer.initializeGeneratorForTable(key);
         return 0;
-      case SIZE:
+      case "SIZE":
         return generatorForServer.size(key);
-      case WRITE_DICTIONARY:
+      case "WRITE_DICTIONARY":
         generatorForServer.writeDictionaryData(key);
         return 0;
       default:

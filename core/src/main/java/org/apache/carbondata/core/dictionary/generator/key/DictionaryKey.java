@@ -18,12 +18,11 @@
  */
 package org.apache.carbondata.core.dictionary.generator.key;
 
-import java.io.Serializable;
 
 /**
  * Dictionary key to generate dictionary
  */
-public class DictionaryKey implements Serializable {
+public class DictionaryKey {
 
   private String tableUniqueName;
 
@@ -31,18 +30,10 @@ public class DictionaryKey implements Serializable {
 
   private Object data;
 
-  private MESSAGETYPE type;
+  private String type;
 
   private String threadNo;
 
-  public DictionaryKey(String tableUniqueName, String columnName,
-                       String data, MESSAGETYPE messagetype, String threadNo) {
-    this.tableUniqueName = tableUniqueName;
-    this.columnName = columnName;
-    this.data = data;
-    this.type = messagetype;
-    this.threadNo = threadNo;
-  }
 
   public String getTableUniqueName() {
     return tableUniqueName;
@@ -60,14 +51,6 @@ public class DictionaryKey implements Serializable {
     this.data = data;
   }
 
-  public void setMessage(MESSAGETYPE msg) {
-    this.type = msg;
-  }
-
-  public MESSAGETYPE getMessageType() {
-    return type;
-  }
-
   public void setThreadNo(String threadNo) {
     this.threadNo = threadNo;
   }
@@ -76,4 +59,19 @@ public class DictionaryKey implements Serializable {
     return this.threadNo;
   }
 
+  public String getType() {
+    return type;
+  }
+
+  public void setType(String type) {
+    this.type = type;
+  }
+
+  public void setTableUniqueName(String tableUniqueName) {
+    this.tableUniqueName = tableUniqueName;
+  }
+
+  public void setColumnName(String columnName) {
+    this.columnName = columnName;
+  }
 }

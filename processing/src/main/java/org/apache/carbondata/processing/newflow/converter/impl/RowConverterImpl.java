@@ -29,7 +29,6 @@ import org.apache.carbondata.core.cache.dictionary.Dictionary;
 import org.apache.carbondata.core.cache.dictionary.DictionaryColumnUniqueIdentifier;
 import org.apache.carbondata.core.dictionary.client.DictionaryClient;
 import org.apache.carbondata.core.dictionary.generator.key.DictionaryKey;
-import org.apache.carbondata.core.dictionary.generator.key.MESSAGETYPE;
 import org.apache.carbondata.core.util.CarbonTimeStatisticsFactory;
 import org.apache.carbondata.processing.datatypes.GenericDataType;
 import org.apache.carbondata.processing.datatypes.PrimitiveDataType;
@@ -154,7 +153,7 @@ public class RowConverterImpl implements RowConverter {
           if (fieldConverters[i] instanceof DictionaryFieldConverterImpl) {
             DictionaryKey dictionaryKey =
                     ((DictionaryFieldConverterImpl) fieldConverters[i]).getDictionaryKey();
-            dictionaryKey.setMessage(MESSAGETYPE.WRITE_DICTIONARY);
+            dictionaryKey.setType("WRITE_DICTIONARY");
             dictClient.getDictionary(dictionaryKey);
           } else if (fieldConverters[i] instanceof ComplexFieldConverterImpl){
             List<GenericDataType> primitiveChild = new ArrayList<GenericDataType>();
@@ -164,7 +163,7 @@ public class RowConverterImpl implements RowConverter {
               if (false == ((PrimitiveDataType) child)
                       .getDictionaryGenerator() instanceof DirectDictionary) {
                 DictionaryKey dictionaryKey = ((PrimitiveDataType) child).getDictionaryKey();
-                dictionaryKey.setMessage(MESSAGETYPE.WRITE_DICTIONARY);
+                dictionaryKey.setType("WRITE_DICTIONARY");
                 dictClient.getDictionary(dictionaryKey);
               }
             }

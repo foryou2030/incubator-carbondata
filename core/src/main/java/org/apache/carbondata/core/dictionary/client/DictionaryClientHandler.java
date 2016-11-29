@@ -25,6 +25,8 @@ import java.util.concurrent.LinkedBlockingQueue;
 
 import org.apache.carbondata.core.dictionary.generator.key.DictionaryKey;
 
+import com.alibaba.fastjson.JSON;
+
 import org.jboss.netty.channel.*;
 
 /**
@@ -47,7 +49,8 @@ public class DictionaryClientHandler extends SimpleChannelHandler {
 
   @Override
   public void messageReceived(ChannelHandlerContext ctx, MessageEvent e) throws Exception {
-    DictionaryKey key = (DictionaryKey) e.getMessage();
+    String backkeyString = (String) e.getMessage();
+    DictionaryKey key = JSON.parseObject(backkeyString, DictionaryKey.class);
     BlockingQueue<DictionaryKey> dictKeyQueue = dictKeyQueueMap.get(key.getThreadNo());
     dictKeyQueue.offer(key);
     super.messageReceived(ctx, e);
@@ -76,7 +79,8 @@ public class DictionaryClientHandler extends SimpleChannelHandler {
           dictKeyQueueMap.put(key.getThreadNo(), dictKeyQueue);
         }
       }
-      ctx.getChannel().write(key);
+      String keyString = JSON.toJSONString(key);
+      ctx.getChannel().write(keyString);
     } catch (Exception e) {
       e.printStackTrace();
     }
