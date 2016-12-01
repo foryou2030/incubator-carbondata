@@ -73,10 +73,9 @@ public class DictionaryClient {
    * @param key
    * @return
    */
-  public DictionaryKey getDictionary(DictionaryKey key) {
-
-    return dictionaryClientHandler.getDictionary(key);
-  }
+//  public DictionaryKey getDictionary(DictionaryKey key) {
+//    return dictionaryClientHandler.getDictionary(key);
+//  }
 
   /**
    * shutdown dictionary client
@@ -84,5 +83,9 @@ public class DictionaryClient {
   public void shutDown() {
     clientBootstrap.releaseExternalResources();
     clientBootstrap.shutdown();
+  }
+
+  public void getDictionary(DictionaryKey key) {
+    dictionaryClientHandler.sendRequest(key);
   }
 }

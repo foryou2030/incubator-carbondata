@@ -100,4 +100,21 @@ public class DictionaryClientHandler extends SimpleChannelHandler {
       }
     }
   }
+
+  public void sendRequest(DictionaryKey key) {
+    BlockingQueue<DictionaryKey> dictKeyQueue = null;
+    try {
+      synchronized (lock) {
+        dictKeyQueue = dictKeyQueueMap.get(key.getThreadNo());
+        if (dictKeyQueue == null) {
+          dictKeyQueue = new LinkedBlockingQueue<DictionaryKey>();
+          dictKeyQueueMap.put(key.getThreadNo(), dictKeyQueue);
+        }
+      }
+      String keyString = JSON.toJSONString(key);
+      ctx.getChannel().write(keyString);
+    } catch (Exception e) {
+      e.printStackTrace();
+    }
+  }
 }

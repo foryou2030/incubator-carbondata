@@ -39,6 +39,7 @@ import org.apache.carbondata.core.util.DataTypeUtil;
 import org.apache.carbondata.processing.newflow.DataField;
 import org.apache.carbondata.processing.newflow.converter.BadRecordLogHolder;
 import org.apache.carbondata.processing.newflow.dictionary.DictionaryServerClientDictionary;
+import org.apache.carbondata.processing.newflow.dictionary.HazelcastCollectorDictionary;
 import org.apache.carbondata.processing.newflow.dictionary.PreCreatedDictionary;
 import org.apache.carbondata.processing.newflow.exception.CarbonDataLoadingException;
 import org.apache.carbondata.processing.newflow.row.CarbonRow;
@@ -90,7 +91,9 @@ public class DictionaryFieldConverterImpl extends AbstractDictionaryFieldConvert
       Map<Object, Integer> localCache = new HashMap<>();
       // for generate dictionary
       dictionaryKey.setType("DICTIONARY_GENERATION");
-      dictionaryGenerator = new DictionaryServerClientDictionary(dictionary, client,
+//      dictionaryGenerator = new DictionaryServerClientDictionary(dictionary, client,
+//              dictionaryKey, localCache);
+      dictionaryGenerator = new HazelcastCollectorDictionary(dictionary, client,
               dictionaryKey, localCache);
     } else {
       try {

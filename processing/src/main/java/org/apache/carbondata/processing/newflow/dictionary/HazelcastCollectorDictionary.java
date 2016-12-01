@@ -18,19 +18,22 @@
  */
 package org.apache.carbondata.processing.newflow.dictionary;
 
-import java.util.Map;
-
+import com.hazelcast.config.Config;
+import com.hazelcast.core.Hazelcast;
 import org.apache.carbondata.core.cache.dictionary.Dictionary;
 import org.apache.carbondata.core.constants.CarbonCommonConstants;
 import org.apache.carbondata.core.devapi.BiDictionary;
 import org.apache.carbondata.core.devapi.DictionaryGenerationException;
 import org.apache.carbondata.core.dictionary.client.DictionaryClient;
 import org.apache.carbondata.core.dictionary.generator.key.DictionaryKey;
+import org.apache.carbondata.core.dictionary.generator.key.MESSAGETYPE;
+
+import java.util.Map;
 
 /**
  * Dictionary implementation along with dictionary server client to get new dictionary values
  */
-public class DictionaryServerClientDictionary implements BiDictionary<Integer, Object> {
+public class HazelcastCollectorDictionary implements BiDictionary<Integer, Object> {
 
   private Dictionary dictionary;
 
@@ -42,12 +45,17 @@ public class DictionaryServerClientDictionary implements BiDictionary<Integer, O
 
   private Object lock = new Object();
 
-  public DictionaryServerClientDictionary(Dictionary dictionary, DictionaryClient client,
-      DictionaryKey key, Map<Object, Integer> localCache) {
+  Map<String, Integer> dictionaryMap;
+
+  public HazelcastCollectorDictionary(Dictionary dictionary, DictionaryClient client,
+                                      DictionaryKey key, Map<Object, Integer> localCache) {
     this.dictionary = dictionary;
     this.client = client;
     this.dictionaryKey = key;
     this.localCache = localCache;
+    this.dictionaryMap = Hazelcast
+            .getOrCreateHazelcastInstance(new Config(dictionaryKey.getTableUniqueName()))
+            .getMap(dictionaryKey.getColumnName());
   }
 
   @Override public Integer getOrGenerateKey(Object value) throws DictionaryGenerationException {
@@ -56,8 +64,12 @@ public class DictionaryServerClientDictionary implements BiDictionary<Integer, O
       synchronized (lock) {
         dictionaryKey.setData(value);
         dictionaryKey.setThreadNo(Thread.currentThread().getId() + "");
-//        DictionaryKey dictionaryValue = client.getDictionary(dictionaryKey);
-//        key = (Integer) dictionaryValue.getData();
+        key = dictionaryMap.get(value.toString());
+        if (key == null) {
+          key = dictionaryMap.size() + 2;
+          dictionaryMap.put(value.toString(), key);
+          client.getDictionary(dictionaryKey);
+        }
         localCache.put(value, key);
       }
       int size = dictionary.getDictionaryChunks().getSize();
@@ -83,9 +95,8 @@ public class DictionaryServerClientDictionary implements BiDictionary<Integer, O
   }
 
   @Override public int size() {
-    dictionaryKey.setType("SIZE");
-    int size = //(int) client.getDictionary(dictionaryKey).getData() +
-            dictionary.getDictionaryChunks().getSize();
+    int size = dictionaryMap.size()
+            + dictionary.getDictionaryChunks().getSize();
     return size;
   }
 }
