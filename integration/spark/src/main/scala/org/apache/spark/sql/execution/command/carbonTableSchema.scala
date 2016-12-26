@@ -385,8 +385,8 @@ case class LoadTable(
         .setBadRecordsAction(
           TableOptionConstant.BAD_RECORDS_ACTION.getName + "," + badRecordsLoggerRedirect)
       // when single_pass=true, and use_kettle=false, and not use column dict, and not use all dict
-      val actualUseOnePass: Boolean = useOnePass.toBoolean && !useKettle &&
-        columnDict == null && StringUtils.isEmpty(allDictionaryPath)
+      val actualUseOnePass: Boolean = useOnePass.toBoolean &&
+        !useKettle && StringUtils.isEmpty(allDictionaryPath)
       carbonLoadModel.setUseOnePass(actualUseOnePass)
 
       if (delimiter.equalsIgnoreCase(complex_delimiter_level_1) ||
@@ -419,6 +419,24 @@ case class LoadTable(
         GlobalDictionaryUtil.updateTableMetadataFunc = updateTableMetadata
 
         if (carbonLoadModel.getUseOnePass) {
+          val colDictFilePath = carbonLoadModel.getColDictFilePath
+          if (colDictFilePath != null) {
+            val storePath = relation.tableMeta.storePath
+            val carbonTable = carbonLoadModel.getCarbonDataLoadSchema.getCarbonTable
+            val carbonTableIdentifier = carbonTable.getAbsoluteTableIdentifier
+              .getCarbonTableIdentifier
+            val carbonTablePath = CarbonStorePath
+              .getCarbonTablePath(storePath, carbonTableIdentifier)
+            val dictFolderPath = carbonTablePath.getMetadataDirectoryPath
+            val dimensions = carbonTable.getDimensionByTableName(
+              carbonTable.getFactTableName).asScala.toArray
+            // generate predefined dictionary
+            carbonLoadModel.initPredefDictMap()
+            GlobalDictionaryUtil
+              .generatePredefinedColDictionary(colDictFilePath, carbonTableIdentifier,
+                dimensions, carbonLoadModel, sqlContext, storePath, dictFolderPath)
+          }
+          // dictionaryServerClient dictionary generator
           val dictionaryServerPort = CarbonProperties.getInstance()
             .getProperty(CarbonCommonConstants.DICTIONARY_SERVER_PORT,
               CarbonCommonConstants.DICTIONARY_SERVER_PORT_DEFAULT)
