@@ -55,7 +55,7 @@ public class RowConverterImpl implements RowConverter {
 
   private BadRecordLogHolder logHolder;
 
-  private DictionaryClient dictClient;
+  private DictionaryClient[] dictClients;
 
   private ExecutorService executorService;
 
@@ -77,22 +77,24 @@ public class RowConverterImpl implements RowConverter {
             .toString();
     List<FieldConverter> fieldConverterList = new ArrayList<>();
 
-    long lruCacheStartTime = System.currentTimeMillis();
-
+    List<Future<DictionaryClient>> taskSubmitList = new ArrayList<>();
+    List<DictionaryClient> dictClientList = new ArrayList<>();
     // for one pass load, start the dictionary client
     if (configuration.getUseOnePass()) {
-      executorService = Executors.newFixedThreadPool(1);
-      Future<DictionaryClient> result = executorService.submit(new Callable<DictionaryClient>() {
-        @Override
-        public DictionaryClient call() throws Exception {
-          Thread.currentThread().setName("Dictionary client");
-          DictionaryClient dictionaryClient = new DictionaryClient();
-          dictionaryClient.startClient(configuration.getDictionaryServerHost(),
-                  configuration.getDictionaryServerPort());
-          return dictionaryClient;
-        }
-      });
-
+      executorService = Executors.newFixedThreadPool(fields.length);
+      for (int i = 0; i < fields.length; i++) {
+        Future<DictionaryClient> result = executorService.submit(new Callable<DictionaryClient>() {
+          @Override
+          public DictionaryClient call() throws Exception {
+            Thread.currentThread().setName("Dictionary client");
+            DictionaryClient dictionaryClient = new DictionaryClient();
+            dictionaryClient.startClient(configuration.getDictionaryServerHost(),
+                    configuration.getDictionaryServerPort());
+            return dictionaryClient;
+          }
+        });
+        taskSubmitList.add(result);
+      }
       try {
         // wait for client initialization finished, or will raise null pointer exception
         Thread.sleep(1000);
@@ -101,18 +103,27 @@ public class RowConverterImpl implements RowConverter {
       }
 
       try {
-        dictClient = result.get();
+        for (int i = 0; i < fields.length; i++) {
+          dictClientList.add(taskSubmitList.get(i).get());
+        }
       } catch (InterruptedException e) {
         e.printStackTrace();
       } catch (ExecutionException e) {
         e.printStackTrace();
       }
+    } else {
+      for (int i = 0; i < fields.length; i++) {
+        dictClientList.add(new DictionaryClient());
+      }
     }
+    dictClients = dictClientList.toArray(new DictionaryClient[dictClientList.size()]);
+
+    long lruCacheStartTime = System.currentTimeMillis();
     for (int i = 0; i < fields.length; i++) {
       FieldConverter fieldConverter = FieldEncoderFactory.getInstance()
           .createFieldEncoder(fields[i], cache,
               configuration.getTableIdentifier().getCarbonTableIdentifier(), i, nullFormat,
-              dictClient, configuration.getUseOnePass(),
+              dictClients[i], configuration.getUseOnePass(),
               configuration.getTableIdentifier().getStorePath());
       fieldConverterList.add(fieldConverter);
     }
@@ -156,8 +167,10 @@ public class RowConverterImpl implements RowConverter {
 
     // close dictionary client when finish write
     if (configuration.getUseOnePass()) {
-      dictClient.shutDown();
-      executorService.shutdownNow();
+      for (int i = 0; i < fieldConverters.length; i++) {
+        dictClients[i].shutDown();
+        executorService.shutdownNow();
+      }
     }
   }
 
