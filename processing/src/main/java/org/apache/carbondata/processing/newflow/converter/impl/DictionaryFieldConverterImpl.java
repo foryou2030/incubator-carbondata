@@ -84,6 +84,7 @@ public class DictionaryFieldConverterImpl extends AbstractDictionaryFieldConvert
       dictionaryKey.setColumnName(dataField.getColumn().getColName());
       dictionaryKey.setTableUniqueName(carbonTableIdentifier.getTableUniqueName());
       dictionaryKey.setThreadNo(threadNo);
+      dictionaryKey.setData(0);
       // for table initialization
       dictionaryKey.setType("TABLE_INITIALIZATION");
       client.getDictionary(dictionaryKey);

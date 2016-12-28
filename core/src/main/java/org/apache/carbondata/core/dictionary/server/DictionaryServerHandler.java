@@ -18,12 +18,16 @@
  */
 package org.apache.carbondata.core.dictionary.server;
 
+import com.google.flatbuffers.FlatBufferBuilder;
 import org.apache.carbondata.core.dictionary.generator.ServerDictionaryGenerator;
 import org.apache.carbondata.core.dictionary.generator.key.DictionaryKey;
 
 import com.alibaba.fastjson.JSON;
 
+import org.apache.carbondata.core.dictionary.generator.key.FlatbDictKey;
 import org.jboss.netty.channel.*;
+
+import java.nio.ByteBuffer;
 
 
 /**
@@ -56,13 +60,29 @@ public class DictionaryServerHandler extends SimpleChannelHandler {
    */
   @Override public void messageReceived(ChannelHandlerContext ctx, MessageEvent e)
       throws Exception {
-    String keyString = (String) e.getMessage();
-    DictionaryKey key = JSON.parseObject(keyString, DictionaryKey.class);
+//    String keyString = (String) e.getMessage();
+//    DictionaryKey key = JSON.parseObject(keyString, DictionaryKey.class);
+    ByteBuffer rbb = ((FlatBufferBuilder) e.getMessage()).dataBuffer();
+    DictionaryKey key = new DictionaryKey();
+    FlatbDictKey fkey = FlatbDictKey.getRootAsFlatbDictKey(rbb);
+    key.setTableUniqueName(fkey.tableUniqueName());
+    key.setColumnName(fkey.columnName());
+    key.setData(Integer.parseInt(fkey.data()));
+    key.setType(fkey.type());
+    key.setThreadNo(fkey.threadNo());
     int outPut = processMessage(key);
     key.setData(outPut);
     // Send back the response
-    String backkeyString = JSON.toJSONString(key);
-    ctx.getChannel().write(backkeyString);
+//    String backkeyString = JSON.toJSONString(key);
+    FlatBufferBuilder fbb = new FlatBufferBuilder();
+    int tableUniqueName = fbb.createString(key.getTableUniqueName());
+    int columnName = fbb.createString(key.getColumnName());
+    int data = fbb.createString(key.getData().toString());
+    int type = fbb.createString(key.getType());
+    int threadNo = fbb.createString(key.getThreadNo());
+    int root = FlatbDictKey.createFlatbDictKey(fbb, tableUniqueName, columnName, data, type, threadNo);
+    fbb.finish(root);
+    ctx.getChannel().write(fbb);
     super.messageReceived(ctx, e);
   }
 

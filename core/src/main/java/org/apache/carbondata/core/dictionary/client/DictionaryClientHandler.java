@@ -18,17 +18,20 @@
  */
 package org.apache.carbondata.core.dictionary.client;
 
+import java.nio.ByteBuffer;
 import java.util.Map;
 import java.util.concurrent.BlockingQueue;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.LinkedBlockingQueue;
 
+import com.google.flatbuffers.FlatBufferBuilder;
 import org.apache.carbondata.common.logging.LogService;
 import org.apache.carbondata.common.logging.LogServiceFactory;
 import org.apache.carbondata.core.dictionary.generator.key.DictionaryKey;
 
 import com.alibaba.fastjson.JSON;
 
+import org.apache.carbondata.core.dictionary.generator.key.FlatbDictKey;
 import org.jboss.netty.channel.*;
 
 /**
@@ -54,8 +57,16 @@ public class DictionaryClientHandler extends SimpleChannelHandler {
 
   @Override
   public void messageReceived(ChannelHandlerContext ctx, MessageEvent e) throws Exception {
-    String backkeyString = (String) e.getMessage();
-    DictionaryKey key = JSON.parseObject(backkeyString, DictionaryKey.class);
+//    String backkeyString = (String) e.getMessage();
+//    DictionaryKey key = JSON.parseObject(backkeyString, DictionaryKey.class);
+    ByteBuffer bb = ((FlatBufferBuilder) e.getMessage()).dataBuffer();
+    DictionaryKey key = new DictionaryKey();
+    FlatbDictKey fkey = FlatbDictKey.getRootAsFlatbDictKey(bb);
+    key.setTableUniqueName(fkey.tableUniqueName());
+    key.setColumnName(fkey.columnName());
+    key.setData(Integer.parseInt(fkey.data()));
+    key.setType(fkey.type());
+    key.setThreadNo(fkey.threadNo());
     BlockingQueue<DictionaryKey> dictKeyQueue = dictKeyQueueMap.get(key.getThreadNo());
     dictKeyQueue.offer(key);
     super.messageReceived(ctx, e);
@@ -84,8 +95,16 @@ public class DictionaryClientHandler extends SimpleChannelHandler {
           dictKeyQueueMap.put(key.getThreadNo(), dictKeyQueue);
         }
       }
-      String keyString = JSON.toJSONString(key);
-      ctx.getChannel().write(keyString);
+//      String keyString = JSON.toJSONString(key);
+      FlatBufferBuilder fbb = new FlatBufferBuilder();
+      int tableUniqueName = fbb.createString(key.getTableUniqueName());
+      int columnName = fbb.createString(key.getColumnName());
+      int data = fbb.createString(key.getData().toString());
+      int type = fbb.createString(key.getType());
+      int threadNo = fbb.createString(key.getThreadNo());
+      int root = FlatbDictKey.createFlatbDictKey(fbb, tableUniqueName, columnName, data, type, threadNo);
+      fbb.finish(root);
+      ctx.getChannel().write(fbb);
     } catch (Exception e) {
       LOGGER.error("Error while send request to server " + e.getMessage());
     }
