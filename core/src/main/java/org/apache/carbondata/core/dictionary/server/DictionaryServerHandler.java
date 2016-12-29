@@ -18,10 +18,12 @@
  */
 package org.apache.carbondata.core.dictionary.server;
 
+import org.apache.carbondata.common.logging.LogService;
+import org.apache.carbondata.common.logging.LogServiceFactory;
+import org.apache.carbondata.core.dictionary.client.DictionaryClient;
 import org.apache.carbondata.core.dictionary.generator.ServerDictionaryGenerator;
 import org.apache.carbondata.core.dictionary.generator.key.DictionaryKey;
-
-import com.alibaba.fastjson.JSON;
+import org.apache.carbondata.core.dictionary.generator.key.DictionaryKeyProto;
 
 import org.jboss.netty.channel.*;
 
@@ -31,6 +33,8 @@ import org.jboss.netty.channel.*;
  */
 public class DictionaryServerHandler extends SimpleChannelHandler {
 
+  private static final LogService LOGGER =
+          LogServiceFactory.getLogService(DictionaryClient.class.getName());
   /**
    * dictionary generator
    */
@@ -44,7 +48,7 @@ public class DictionaryServerHandler extends SimpleChannelHandler {
    * @throws Exception
    */
   public void channelConnected(ChannelHandlerContext ctx, ChannelStateEvent e) throws Exception {
-    System.out.println("Connected " + ctx.getHandler());
+    LOGGER.audit("Connected " + ctx.getHandler());
   }
 
   /**
@@ -56,13 +60,13 @@ public class DictionaryServerHandler extends SimpleChannelHandler {
    */
   @Override public void messageReceived(ChannelHandlerContext ctx, MessageEvent e)
       throws Exception {
-    String keyString = (String) e.getMessage();
-    DictionaryKey key = JSON.parseObject(keyString, DictionaryKey.class);
+    DictionaryKeyProto.keyReq request = (DictionaryKeyProto.keyReq) e.getMessage();
+    DictionaryKey key = DictionaryKeyProto.reqToKey(request);
     int outPut = processMessage(key);
     key.setData(outPut);
     // Send back the response
-    String backkeyString = JSON.toJSONString(key);
-    ctx.getChannel().write(backkeyString);
+    DictionaryKeyProto.keyResp response = DictionaryKeyProto.keyToResp(key);
+    ctx.getChannel().write(response);
     super.messageReceived(ctx, e);
   }
 
@@ -73,9 +77,9 @@ public class DictionaryServerHandler extends SimpleChannelHandler {
    * @param e
    */
   @Override public void exceptionCaught(ChannelHandlerContext ctx, ExceptionEvent e) {
+    LOGGER.error("exceptionCaught");
     e.getCause().printStackTrace();
-    Channel ch = e.getChannel();
-    ch.close();
+    ctx.getChannel().close();
   }
 
   /**

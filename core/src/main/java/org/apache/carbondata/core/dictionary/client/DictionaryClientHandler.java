@@ -26,8 +26,7 @@ import java.util.concurrent.LinkedBlockingQueue;
 import org.apache.carbondata.common.logging.LogService;
 import org.apache.carbondata.common.logging.LogServiceFactory;
 import org.apache.carbondata.core.dictionary.generator.key.DictionaryKey;
-
-import com.alibaba.fastjson.JSON;
+import org.apache.carbondata.core.dictionary.generator.key.DictionaryKeyProto;
 
 import org.jboss.netty.channel.*;
 
@@ -48,14 +47,14 @@ public class DictionaryClientHandler extends SimpleChannelHandler {
   @Override
   public void channelConnected(ChannelHandlerContext ctx, ChannelStateEvent e) throws Exception {
     this.ctx = ctx;
-    System.out.println("Connected " + ctx.getHandler());
+    LOGGER.audit("Connected " + ctx.getHandler());
     super.channelConnected(ctx, e);
   }
 
   @Override
   public void messageReceived(ChannelHandlerContext ctx, MessageEvent e) throws Exception {
-    String backkeyString = (String) e.getMessage();
-    DictionaryKey key = JSON.parseObject(backkeyString, DictionaryKey.class);
+    DictionaryKeyProto.keyResp response = (DictionaryKeyProto.keyResp) e.getMessage();
+    DictionaryKey key = DictionaryKeyProto.respToKey(response);
     BlockingQueue<DictionaryKey> dictKeyQueue = dictKeyQueueMap.get(key.getThreadNo());
     dictKeyQueue.offer(key);
     super.messageReceived(ctx, e);
@@ -63,7 +62,8 @@ public class DictionaryClientHandler extends SimpleChannelHandler {
 
   @Override
   public void exceptionCaught(ChannelHandlerContext ctx, ExceptionEvent e) throws Exception {
-    System.out.println("exceptionCaught");
+    LOGGER.error("exceptionCaught");
+    e.getCause().printStackTrace();
     ctx.getChannel().close();
   }
 
@@ -84,10 +84,11 @@ public class DictionaryClientHandler extends SimpleChannelHandler {
           dictKeyQueueMap.put(key.getThreadNo(), dictKeyQueue);
         }
       }
-      String keyString = JSON.toJSONString(key);
-      ctx.getChannel().write(keyString);
+      DictionaryKeyProto.keyReq request = DictionaryKeyProto.keyToReq(key);
+      ctx.getChannel().write(request);
     } catch (Exception e) {
       LOGGER.error("Error while send request to server " + e.getMessage());
+      ctx.getChannel().close();
     }
     boolean interrupted = false;
     try {

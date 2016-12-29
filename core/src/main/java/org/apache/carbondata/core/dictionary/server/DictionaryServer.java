@@ -22,22 +22,27 @@ import java.net.InetSocketAddress;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
 
+import org.apache.carbondata.common.logging.LogService;
+import org.apache.carbondata.common.logging.LogServiceFactory;
 import org.apache.carbondata.core.dictionary.generator.key.DictionaryKey;
+import org.apache.carbondata.core.dictionary.generator.key.DictionaryKeyProto;
 
 import org.jboss.netty.bootstrap.ServerBootstrap;
 import org.jboss.netty.channel.ChannelPipeline;
 import org.jboss.netty.channel.ChannelPipelineFactory;
 import org.jboss.netty.channel.Channels;
 import org.jboss.netty.channel.socket.nio.NioServerSocketChannelFactory;
-import org.jboss.netty.handler.codec.serialization.ClassResolvers;
-import org.jboss.netty.handler.codec.serialization.ObjectDecoder;
-import org.jboss.netty.handler.codec.serialization.ObjectEncoder;
+import org.jboss.netty.handler.codec.protobuf.ProtobufDecoder;
+import org.jboss.netty.handler.codec.protobuf.ProtobufEncoder;
 
 
 /**
  * Dictionary Server to generate dictionary keys.
  */
 public class DictionaryServer {
+
+  private static final LogService LOGGER =
+          LogServiceFactory.getLogService(DictionaryServer.class.getName());
 
   private ServerBootstrap bootstrap;
   private DictionaryServerHandler dictionaryServerHandler;
@@ -61,15 +66,15 @@ public class DictionaryServer {
       @Override
       public ChannelPipeline getPipeline() throws Exception {
         ChannelPipeline pipeline = Channels.pipeline();
-        pipeline.addLast("ObjectDecoder", new ObjectDecoder(ClassResolvers.cacheDisabled(
-            getClass().getClassLoader())));
-        pipeline.addLast("ObjectEncoder", new ObjectEncoder());
+        pipeline.addLast("ProtobufDecoder",
+                new ProtobufDecoder(DictionaryKeyProto.keyReq.getDefaultInstance()));
+        pipeline.addLast("ProtobufEncoder", new ProtobufEncoder());
         pipeline.addLast("DictionaryServerHandler", dictionaryServerHandler);
         return pipeline;
       }
     });
     bootstrap.bind(new InetSocketAddress(port));
-    System.out.println("Server Start!");
+    LOGGER.audit("Server Start!");
   }
 
   /**

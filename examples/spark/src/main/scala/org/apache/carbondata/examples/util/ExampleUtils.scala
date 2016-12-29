@@ -37,7 +37,7 @@ object ExampleUtils {
     val sc = new SparkContext(new SparkConf()
         .setAppName(appName)
         .setMaster("local[2]"))
-    sc.setLogLevel("ERROR")
+//    sc.setLogLevel("ERROR")
 
     println(s"Starting $appName using spark version ${sc.version}")
 

@@ -86,6 +86,7 @@ public class DictionaryFieldConverterImpl extends AbstractDictionaryFieldConvert
       dictionaryKey.setThreadNo(threadNo);
       // for table initialization
       dictionaryKey.setType("TABLE_INITIALIZATION");
+      dictionaryKey.setData("0");
       client.getDictionary(dictionaryKey);
       Map<Object, Integer> localCache = new HashMap<>();
       // for generate dictionary
