@@ -22,7 +22,6 @@ import org.apache.carbondata.common.logging.LogService;
 import org.apache.carbondata.common.logging.LogServiceFactory;
 import org.apache.carbondata.core.dictionary.generator.ServerDictionaryGenerator;
 import org.apache.carbondata.core.dictionary.generator.key.DictionaryKey;
-import org.apache.carbondata.core.dictionary.generator.key.KryoRegister;
 
 import org.jboss.netty.channel.*;
 
@@ -59,13 +58,11 @@ public class DictionaryServerHandler extends SimpleChannelHandler {
    */
   @Override public void messageReceived(ChannelHandlerContext ctx, MessageEvent e)
       throws Exception {
-    byte[] request = (byte[]) e.getMessage();
-    DictionaryKey key = KryoRegister.deserialize(request);
+    DictionaryKey key = (DictionaryKey) e.getMessage();
     int outPut = processMessage(key);
     key.setData(outPut);
     // Send back the response
-    byte[] response = KryoRegister.serialize(key);
-    ctx.getChannel().write(response);
+    ctx.getChannel().write(key);
     super.messageReceived(ctx, e);
   }
 

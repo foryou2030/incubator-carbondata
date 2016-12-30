@@ -26,13 +26,11 @@ import org.apache.carbondata.common.logging.LogService;
 import org.apache.carbondata.common.logging.LogServiceFactory;
 import org.apache.carbondata.core.dictionary.generator.key.DictionaryKey;
 
+import org.apache.carbondata.core.dictionary.generator.key.KryoMsgDecoder;
+import org.apache.carbondata.core.dictionary.generator.key.KryoMsgEncoder;
 import org.jboss.netty.bootstrap.ClientBootstrap;
 import org.jboss.netty.channel.*;
 import org.jboss.netty.channel.socket.nio.NioClientSocketChannelFactory;
-import org.jboss.netty.handler.codec.serialization.ClassResolvers;
-import org.jboss.netty.handler.codec.serialization.ObjectDecoder;
-import org.jboss.netty.handler.codec.serialization.ObjectEncoder;
-
 
 /**
  * Dictionary client to connect to Dictionary server and generate dictionary values
@@ -61,9 +59,8 @@ public class DictionaryClient {
       @Override
       public ChannelPipeline getPipeline() throws Exception {
         ChannelPipeline pipeline = Channels.pipeline();
-        pipeline.addLast("ObjectEncoder", new ObjectEncoder());
-        pipeline.addLast("ObjectDecoder", new ObjectDecoder(ClassResolvers.cacheDisabled(
-            getClass().getClassLoader())));
+        pipeline.addLast("KryoMsgDecoder", new KryoMsgDecoder());
+        pipeline.addLast("KryoMsgEncoder", new KryoMsgEncoder());
         pipeline.addLast("DictionaryClientHandler", dictionaryClientHandler);
         return pipeline;
       }
